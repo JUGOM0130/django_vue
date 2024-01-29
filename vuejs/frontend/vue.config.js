@@ -5,6 +5,7 @@ module.exports = defineConfig({
   assetsDir:  "static",
   indexPath: "../templates/index.html",
   transpileDependencies: true,
+
   devServer: {
     host: "localhost",
     hot: "only",
@@ -15,4 +16,10 @@ module.exports = defineConfig({
       },
     },
   },
+
+  pluginOptions: {
+    vuetify: {
+			// https://github.com/vuetifyjs/vuetify-loader/tree/next/packages/vuetify-loader
+		}
+  }
 })
