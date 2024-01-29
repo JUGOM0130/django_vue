@@ -1,0 +1,7 @@
+{
+    //折り返す設定
+    "editor.wordWrap": "on",
+    "python.analysis.extraPaths": [
+        "/root/workspace/djang-env/lib/python3.9/site-packages"
+      ]
+}
