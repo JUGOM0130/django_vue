@@ -1,7 +1,22 @@
-# django-admin startproject mysite
+# プロジェクト作成
+```cmd
+//プロジェクト作成
+django-admin startproject project
 
-# python manage.py startapp polls
+cd project
 
-# python manage.py makemigrations
+//アプリケーション作成
+python manage.py startapp application
 
-# python manage.py migrate
+//マイグレーションファイル作成
+python manage.py makemigrations
+
+//マイグレーション実行
+python manage.py migrate
+
+//superuser作成
+python manage.py createsuperuser
+
+```
+# クラスベースビュー、関数ベースビュー
+* 基本はクラスベースビューを使う方がいいみたい

@@ -1,0 +1,10 @@
+#
+__pycache__
+
+# django
+djang-env
+django-env*
+djangotest
+
+# vue
+testvue

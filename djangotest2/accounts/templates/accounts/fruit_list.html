@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FruitList</title>
+</head>
+
+<body>
+    <div>
+        <a href="{% url 'accounts:fruit_create' %}">regist</a>
+        <p>href="{% url 'accounts:fruit_create' %}" 名前からパスを解決してくれる書き方</p>
+    </div>
+    <hr>
+    <table>
+        <tr>
+            <th>name</th>
+            <th>price</th>
+            <th>remarks</th>
+        </tr>
+        {%for f in object_list%}
+        <tr>
+            <td>{{f.name}}</td>
+            <td>{{f.price}}</td>
+            <td>{{f.remarks}}</td>
+        </tr>
+        {%endfor%}
+    </table>
+    <p>object_listという名前で取得可能（modelに指定したモデル）</p>
+</body>
+
+</html>

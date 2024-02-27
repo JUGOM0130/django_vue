@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>アカウント情報</title>
+</head>
+
+<body>
+    <!--
+    {{variable_name}}
+
+    {#comment#}
+
+    {%for i in num%}
+    {%endfor%}
+
+    {%if true_or_false%}
+    {%endif%}
+
+-->
+    <h1>{{variable1}}：{{variable2}}の情報</h1>
+    {%for u in user%}
+    <p>account_id : {{u.account_id}}</p>
+    <p>email : {{u.email}}</p>
+    <p>first_name : {{u.first_name}}</p>
+    <p>last_name : {{u.last_name}}</p>
+    <p>birth_date : {{u.birth_date}}</p>
+    <p>created_at : {{u.created_at}}</p>
+    <p>updated_at : {{u.updated_at}}</p>
+    {%endfor%}
+
+
+
+</body>
+
+</html>

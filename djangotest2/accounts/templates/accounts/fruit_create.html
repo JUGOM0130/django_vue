@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Create Fruit</title>
+</head>
+
+<body>
+    <h1>Create Fruit</h1>
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit">Submit</button>
+    </form>
+
+    <hr>
+
+    {# テンプレートエンジンとして読み込まないようにしてくれる書き方 verbatim #}
+    {% verbatim %}
+    <p>{{ form.as_p }}この書き方でなぜか上記必要項目が生成される</p>
+    <p>登録処理はこのフォームを渡してきたクラスの def form_valid(): メソッドで実行される</p>
+    {% endverbatim %}
+</body>
+
+
+</html>
