@@ -5,7 +5,6 @@ module.exports = defineConfig({
   assetsDir:  "static",
   indexPath: "../templates/index.html",
   transpileDependencies: true,
-
   devServer: {
     host: "localhost",
     hot: "only",
@@ -15,6 +14,18 @@ module.exports = defineConfig({
         changeOrigin: true,
       },
     },
+  },
+  pages:{
+    top:{
+      entry:'src/main.js',
+      template:'public/index.html',
+      filename:'index.html'
+    },
+    tree:{
+      entry:'src/entrysjs/tree.js',
+      template:'public/tree.html',
+      filename:'tree.html'
+    }
   },
 
   pluginOptions: {
