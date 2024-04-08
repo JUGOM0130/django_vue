@@ -96,9 +96,30 @@ class User(AbstractBaseUser, PermissionsMixin):
 
 
 class Fruit(models.Model):
-    name = models.CharField(max_length=100)
-    price = models.DecimalField(max_digits=10, decimal_places=2)
-    remarks = models.TextField(blank=True)
-
+    name = models.CharField(
+        max_length=100,
+        verbose_name="名前"
+    )
+    price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        verbose_name="価格"
+    )
+    remarks = models.TextField(
+        blank=True,
+        verbose_name="詳細"
+    )
+    category = models.CharField(
+        max_length=100,
+        verbose_name="カテゴリ"
+    )
+    created_at = models.DateTimeField(
+        verbose_name=_("作成日"),
+        auto_now_add=True
+    )
+    updated_at = models.DateTimeField(
+        verbose_name=_("更新日"),
+        auto_now=True
+    )
     def __str__(self):
         return self.name

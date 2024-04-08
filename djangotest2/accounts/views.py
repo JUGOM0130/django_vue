@@ -2,7 +2,7 @@ from django.contrib.auth import login, authenticate
 from django.views.generic import TemplateView, CreateView,ListView
 from django.contrib.auth.views import LoginView as BaseLoginView,  LogoutView as BaseLogoutView
 from django.urls import reverse_lazy
-from .forms import SignUpForm, LoginFrom
+from .forms import SignUpForm, LoginFrom, RegistForm
 from .models import User,Fruit
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.conf import settings
@@ -95,14 +95,16 @@ class FruitList(LoginRequiredMixin,ListView):
 class FruitCreateView(LoginRequiredMixin,CreateView):
     # 画面を表示するのに必要な情報↓
     model = Fruit
-    fields = ['name', 'price', 'remarks']  # 作成フォームに表示するフィールド
+    '''
+    form_classと併用はできない
+    fields = ['name', 'price', 'remarks','category']  # 作成フォームに表示するフィールド
+    '''
     template_name = "accounts/fruit_create.html"
+    form_class = RegistForm
 
     # 登録処理をするのに必要な構文↓
     success_url = reverse_lazy('accounts:fruit_index')  # 登録後のリダイレクト先
     def form_valid(self, form):
-
-        print("form_valid")
         # フォームのデータを保存する前に何か特別な処理を追加する場合はここに記述
         return super().form_valid(form)
 

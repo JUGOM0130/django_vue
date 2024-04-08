@@ -18,12 +18,18 @@
             <th>name</th>
             <th>price</th>
             <th>remarks</th>
+            <th>category</th>
+            <th>created_at</th>
+            <th>updated_at</th>
         </tr>
         {%for f in object_list%}
         <tr>
             <td>{{f.name}}</td>
             <td>{{f.price}}</td>
             <td>{{f.remarks}}</td>
+            <td>{{f.category}}</td>
+            <td>{{f.created_at}}</td>
+            <td>{{f.updated_at}}</td>
         </tr>
         {%endfor%}
     </table>

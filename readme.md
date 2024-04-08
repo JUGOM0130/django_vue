@@ -20,3 +20,19 @@ python manage.py createsuperuser
 ```
 # クラスベースビュー、関数ベースビュー
 * 基本はクラスベースビューを使う方がいいみたい
+
+# shellを使ってモデルクラスの操作
+
+```cmd
+python manage.py shell
+
+//モデルクラスへのアクセス
+from fruits.models model import FruitsModel
+
+obj = FruitsModel(name='banana')
+
+obj.name
+
+obj.save()
+
+```
