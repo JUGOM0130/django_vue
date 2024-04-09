@@ -1,41 +1,28 @@
 <script setup>
 import { defineProps, ref } from 'vue'
 import ThisComponet from './TreeIndex.vue'
+import testobject from './testobject';
 
 const props = defineProps({
     parentobj: Object
 })
+
+let o
+
 /**デフォルトオブジェクト */
-let o = ref([
-    {
-        id: "1",
-        child: [
-            {
-                id: "2",
-                child: [
+o = ref(testobject.data)
+//console.log("mounted",o.value,"props",props.parentobj,"testobject.data",testobject.data)
 
-                ]
-            }
-        ],
-    }, {
-        id: "3",
-        child: [
-            {
-                id: "4",
-                child: [
-
-                ]
-            }
-        ]
-    }
-])
-
-if (props.parentobj != null) {
+/**props.parentにデータがあれば */
+if (props.parentobj != undefined) {
     /*オブジェクト上書き */
-    o = ref(props.value);
+    o = ref(props.parentobj);
 }
 
-console.log(o.value)
+const objectadd =(c)=>{
+    let random = Math.random()%100
+    c.push({id:random,content:`tuikasaki${random}`,child:[]})
+}
 
 
 </script>
@@ -43,15 +30,23 @@ console.log(o.value)
     <div>
         <ul>
             <li v-for="d in o" :key="d.id">
-                {{ d.id }}
+                {{ d.content }}
+                <button @click="objectadd(d.child)">+</button>
                 <ThisComponet :parentobj="d.child" />
             </li>
         </ul>
     </div>
 </template>
-<style>
+<style scoped>
 * {
     margin: 0;
     padding: 0;
+}
+ul{
+    margin-left: 20px;
+    list-style: none;
+}
+div{
+    background-color: azure;
 }
 </style>
