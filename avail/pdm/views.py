@@ -34,7 +34,8 @@ class CodeView(viewsets.ModelViewSet):
 
             return_en_number=0
             return_max_number=0
-            return_code_str=''
+            return_code_str:str=''
+            code_obj={}
 
             # en_numberの最大値分ループ処理をする
             for i in range(en_max):
@@ -50,7 +51,7 @@ class CodeView(viewsets.ModelViewSet):
                                                     chr(64+en_number),
                                                     str(return_max_number).zfill(DIGIT))
 
-                    Code.objects.create(code_header=CodeHeader.objects.get(pk=ch),
+                    code_obj = Code.objects.create(code_header=CodeHeader.objects.get(pk=ch),
                                         en_number=en_number,
                                         number=return_max_number,
                                         kind=kind,
@@ -74,17 +75,18 @@ class CodeView(viewsets.ModelViewSet):
                                                         str(return_max_number).zfill(DIGIT)
                                                         )
                         
-                        Code.objects.create(code_header=CodeHeader.objects.get(pk=ch),
-                                        en_number=return_en_number,
-                                        number=return_max_number,
-                                        kind=kind,
-                                        code=return_code_str
-                                        )
+                        code_obj = Code.objects.create(code_header=CodeHeader.objects.get(pk=ch),
+                                                                en_number=return_en_number,
+                                                                number=return_max_number,
+                                                                kind=kind,
+                                                                code=return_code_str
+                                                                )
                         break
                 elif(value == None):
                     return Response({'message': 'パラメータが不正です。'}, status=555)
             
-            return Response({'en_number': return_en_number,
+            return Response({'code_id':code_obj.id,
+                             'en_number': return_en_number,
                              'number':return_max_number,
                              'code':return_code_str,
                              'message':''
