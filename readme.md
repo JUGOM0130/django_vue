@@ -16,6 +16,8 @@ python manage.py migrate
 
 //superuser作成
 python manage.py createsuperuser
+//root
+//syssui
 
 ```
 # クラスベースビュー、関数ベースビュー
