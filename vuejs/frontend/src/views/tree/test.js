@@ -1,5 +1,4 @@
-export default{
-    data : [
+let data =[
         {
             id: "1",
             content:"ALD-A0001Z000",
@@ -31,16 +30,16 @@ export default{
                 }
             ]
         }
-    ],
-    data2:[
-        {
-            id:"1",
-            group_id:"hogehoge",
-            deep_level:"1",
-            parent_id:"2",
-            code_id:"1",
-            code_name:"ALD-A0001",
-            child:[]
+    ];
+
+function find(child,find_item){
+    let object = child;
+    for(let i=0; i<object.length; i++){
+        if(object[i].id==find_item){
+            console.log(object)
         }
-    ]
+    }
+    find(object.find,find_item)
 }
+console.log(data)
+console.log(find(data,"4"))
