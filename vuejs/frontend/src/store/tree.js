@@ -2,13 +2,20 @@ import { createStore } from 'vuex'
 
 export default createStore({
   state: {
-    treeobject:[]
+    
+    tree_right_click_menu_visible:false
   },
   getters: {
+    getRightClickMenuVisible(state){
+      return state.tree_right_click_menu_visible
+    }
   },
   mutations: {
-    addTreeObject(state,id,child_array_data){
-      console.log(state,id,child_array_data)
+    TreeRightClickMenuShow(state){
+      state.tree_right_click_menu_visible = true;
+    },
+    TreeRightClickMenuHide(state){
+      state.tree_right_click_menu_visible = false;
     }
   },
   actions: {

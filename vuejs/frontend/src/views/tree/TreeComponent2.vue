@@ -3,8 +3,14 @@
  * 多次元オブジェクトではなく
  * 一次元オブジェクトで表現をするためのサンプル作成
  */
-import { ref, onMounted } from 'vue'
+import { ref, onMounted,computed } from 'vue'
+import TreeRightClickMenu from './TreeRightClickMenu.vue'
+import { useStore } from 'vuex';
 
+const store = useStore();
+let ax = ref(0);
+let ay = ref(0);
+let isShowMenu = ref(store.state.tree_right_click_menu_visible);
 let newdata = ref([]);
 let data = ref([
     { id: "1", group_id: "1", deep_level: "1", parent_id: "0", code_id: "ALD-A0001" },
@@ -62,29 +68,69 @@ const createTreeMethod = () => {
 
 }
 
+/**
+ * ツリー右クリック時にメニュ表示用イベント
+ * @param e マウスカーソルの位置を取得するための引数
+ * 
+ */
+const rightClick = (e)=>{
+    ax.value = e.clientX;
+    ay.value = e.clientY;
+    store.commit('TreeRightClickMenuShow');
+    isShowMenu.value = store.state.tree_right_click_menu_visible;
+}
+
+/**
+ * マウントした時のイベント
+ */
 onMounted(() => {
     createTreeMethod();
 })
 
+// メニュー表示用のCSS
+let dynamicStyle = computed(() => {
+  return {
+    position:"absolute",
+    top:`${ay.value}px`,
+    left:`${ax.value}px`
+  };
+});
+
+
+const getMenuState =()=>{
+    /**
+     * vuexの値を見て
+     * Menuの表示非表示を決めてる
+     */
+    isShowMenu.value = store.state.tree_right_click_menu_visible;
+}
 
 </script>
 
 <template>
     <div>
-        <div v-for="d in data" :key="d.id">
-            <div v-for="n in Number(d.deep_level)" :key="n + d.id" class="space"></div>
-            {{ d.code_id }}
-        </div>
+        <ul v-for="d in data" :key="d.id" @click.right.prevent="rightClick">
+            <li>
+                <div v-for="n in Number(d.deep_level)" :key="n + d.id" class="space"></div>
+                {{ d.code_id }}
+            </li>
+        </ul>
+        <TreeRightClickMenu v-show="isShowMenu" :style="dynamicStyle" @showVisble="getMenuState"/>
     </div>
 </template>
 
-<style>
+<style scoped>
 .space {
     display: inline-block;
     margin: 0;
     padding: 0;
     width: 20px;
     height: 5px;
-
+}
+ul{
+    list-style: none;
+}
+li:hover{
+    background: gainsboro;
 }
 </style>
