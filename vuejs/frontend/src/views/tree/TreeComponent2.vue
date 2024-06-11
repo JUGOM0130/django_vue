@@ -3,7 +3,7 @@
  * 多次元オブジェクトではなく
  * 一次元オブジェクトで表現をするためのサンプル作成
  */
-import { ref, onMounted,computed } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import TreeRightClickMenu from './TreeRightClickMenu.vue'
 import { useStore } from 'vuex';
 
@@ -71,13 +71,30 @@ const createTreeMethod = () => {
 /**
  * ツリー右クリック時にメニュ表示用イベント
  * @param e マウスカーソルの位置を取得するための引数
- * 
+ *
  */
-const rightClick = (e)=>{
+const rightClick = (e) => {
+    //右クリック時のカーソル位置取得
+    //表示非常時のフラグをVuexにて管理
     ax.value = e.clientX;
     ay.value = e.clientY;
     store.commit('TreeRightClickMenuShow');
     isShowMenu.value = store.state.tree_right_click_menu_visible;
+
+
+    //クリックされた要素の情報を退避
+    const index = Number(e.target.id);
+    console.log(newdata.value[index])
+    /*
+    let id = newdata.value[index].id;
+    let group_id = newdata.value[index].group_id;
+    let deep_level = newdata.value[index].deep_level;
+    let parent_id = newdata.value[index].parent_id;
+    let code_id = newdata.value[index].code_id;
+    */
+    const { id, group_id, deep_level, parent_id, code_id } = newdata.value[index];
+    const pyload = { id: id, group_id: group_id, deep_level: deep_level, parent_id: parent_id, code_id: code_id }
+    store.commit('SetObject', pyload)
 }
 
 /**
@@ -89,15 +106,15 @@ onMounted(() => {
 
 // メニュー表示用のCSS
 let dynamicStyle = computed(() => {
-  return {
-    position:"absolute",
-    top:`${ay.value}px`,
-    left:`${ax.value}px`
-  };
+    return {
+        position: "absolute",
+        top: `${ay.value}px`,
+        left: `${ax.value}px`
+    };
 });
 
 
-const getMenuState =()=>{
+const getMenuState = () => {
     /**
      * vuexの値を見て
      * Menuの表示非表示を決めてる
@@ -109,13 +126,13 @@ const getMenuState =()=>{
 
 <template>
     <div>
-        <ul v-for="d in data" :key="d.id" @click.right.prevent="rightClick">
-            <li>
+        <ul>
+            <li v-for="(d, index) in data" :key="d.id" @click.right.prevent="rightClick" :id="index">
                 <div v-for="n in Number(d.deep_level)" :key="n + d.id" class="space"></div>
                 {{ d.code_id }}
             </li>
         </ul>
-        <TreeRightClickMenu v-show="isShowMenu" :style="dynamicStyle" @showVisble="getMenuState"/>
+        <TreeRightClickMenu v-show="isShowMenu" :style="dynamicStyle" @showVisble="getMenuState" />
     </div>
 </template>
 
@@ -127,10 +144,12 @@ const getMenuState =()=>{
     width: 20px;
     height: 5px;
 }
-ul{
+
+ul {
     list-style: none;
 }
-li:hover{
+
+li:hover {
     background: gainsboro;
 }
 </style>
