@@ -3,14 +3,17 @@
  * 多次元オブジェクトではなく
  * 一次元オブジェクトで表現をするためのサンプル作成
  */
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, onBeforeUpdate } from 'vue'
 import TreeRightClickMenu from './TreeRightClickMenu.vue'
 import { useStore } from 'vuex';
+import AddMaterial from './AddMaterial.vue';
+import axios from 'axios';
 
+const defaultErrorMessage = "TreeComponent2.vue内でエラー";
 const store = useStore();
-let ax = ref(0);
-let ay = ref(0);
+const DJANGO_BASEURL=process.env.VUE_APP_API_BASE_URL;
 let isShowMenu = ref(store.state.tree_right_click_menu_visible);
+let menu2visible = ref(store.state.tree_header_list_visible);
 let newdata = ref([]);
 let data = ref([
     { id: "1", group_id: "1", deep_level: "1", parent_id: "0", code_id: "ALD-A0001" },
@@ -18,14 +21,33 @@ let data = ref([
     { id: "3", group_id: "1", deep_level: "3", parent_id: "2", code_id: "ALD-A0003" },
     { id: "4", group_id: "1", deep_level: "2", parent_id: "1", code_id: "ALD-A0004" },
     { id: "5", group_id: "1", deep_level: "2", parent_id: "1", code_id: "ALD-A0005" },
-    { id: "6", group_id: "1", deep_level: "3", parent_id: "4", code_id: "ALD-A0006" },
-    { id: "7", group_id: "1", deep_level: "4", parent_id: "6", code_id: "ALD-A0007" }
+    { id: "140", group_id: "1", deep_level: "3", parent_id: "5", code_id: "ALD-A0006" },
+    { id: "141", group_id: "1", deep_level: "4", parent_id: "140", code_id: "ALD-A0007" }
 ])
+
+/**
+ * 同期処理でコードのヘッダーを一覧で取得してくるメソッド
+ * 取得後は
+ */
+const getMaterial = async () => {
+    await axios.get(`${DJANGO_BASEURL}/api/codeheader`)
+        .then((response) => {
+            store.commit("SetMaterial", response.data)
+        })
+        .catch(error => {
+            console.error(error);
+            alert(defaultErrorMessage)
+        });
+}
+
 
 /**
  * オブジェクトからツリーを生成するメソッド
  */
 const createTreeMethod = () => {
+    //変数初期化
+    newdata.value = [];
+
     //parentidでソートをかける
     data.value.sort((a, b) => {
         let aa = Number(a.parent_id);
@@ -36,12 +58,18 @@ const createTreeMethod = () => {
         return 0;
     });
 
-    for (let i = 0; i < data.value.length; i++) {
+    let parent_id_array = [];
+    parent_id_array = data.value.map(e => e.parent_id)//オブジェクト配列から特定のキーを取り除いて新しい配列を返す
+    parent_id_array = [...new Set(parent_id_array)]//配列から重複値を取り除いた新しい配列を返す
+
+    console.log("1", data.value)
+
+    parent_id_array.forEach((e, i) => {
 
         let parent_index = i;
 
         //e.parentid
-        let targeta = data.value.filter(fe => fe.parent_id == String(parent_index)).sort((uu, yy) => {
+        let targeta = data.value.filter(fe => fe.parent_id == String(e)).sort((uu, yy) => {
             let aa = Number(uu.id);
             let bb = Number(yy.id);
 
@@ -49,6 +77,9 @@ const createTreeMethod = () => {
             if (aa > bb) return 1;
             return 0;
         });
+
+        console.log("2", parent_index, targeta)
+
         targeta.reverse().forEach(t => {
             if (t.parent_id != "0") {
                 let findid = t.parent_id;
@@ -59,7 +90,8 @@ const createTreeMethod = () => {
                 newdata.value.push(t);
             }
         });
-    }
+    });
+
     data.value = [];
     newdata.value.reverse().forEach(e => {
         data.value.push(e)
@@ -76,15 +108,15 @@ const createTreeMethod = () => {
 const rightClick = (e) => {
     //右クリック時のカーソル位置取得
     //表示非常時のフラグをVuexにて管理
-    ax.value = e.clientX;
-    ay.value = e.clientY;
+    const zahyo = { x: e.clientX, y: e.clientY }
+    store.commit('TreeRightClickMenuSetPosition', zahyo)
     store.commit('TreeRightClickMenuShow');
     isShowMenu.value = store.state.tree_right_click_menu_visible;
 
 
     //クリックされた要素の情報を退避
     const index = Number(e.target.id);
-    console.log(newdata.value[index])
+
     /*
     let id = newdata.value[index].id;
     let group_id = newdata.value[index].group_id;
@@ -102,14 +134,15 @@ const rightClick = (e) => {
  */
 onMounted(() => {
     createTreeMethod();
+    getMaterial();
 })
 
 // メニュー表示用のCSS
 let dynamicStyle = computed(() => {
     return {
         position: "absolute",
-        top: `${ay.value}px`,
-        left: `${ax.value}px`
+        top: `${store.state.tree_right_click_menu_position.y}px`,
+        left: `${store.state.tree_right_click_menu_position.x}px`
     };
 });
 
@@ -120,7 +153,27 @@ const getMenuState = () => {
      * Menuの表示非表示を決めてる
      */
     isShowMenu.value = store.state.tree_right_click_menu_visible;
+    menu2visible.value = store.state.tree_header_list_visible;
 }
+
+/**DOM更新前処理*/
+onBeforeUpdate(() => {
+    const { id, group_id, deep_level, parent_id, code_id } = store.state.new_object
+
+    if (id != "" && id != undefined) {
+        data.value.push({
+            id: id,
+            group_id: group_id,
+            deep_level: deep_level,
+            parent_id: parent_id,
+            code_id: code_id
+        })
+        
+        createTreeMethod();
+        store.commit("SetEmptyNewObject")
+    }
+})
+
 
 </script>
 
@@ -133,6 +186,9 @@ const getMenuState = () => {
             </li>
         </ul>
         <TreeRightClickMenu v-show="isShowMenu" :style="dynamicStyle" @showVisble="getMenuState" />
+        <AddMaterial v-show="menu2visible" :style="dynamicStyle" @showVisble="getMenuState"></AddMaterial>
+
+
     </div>
 </template>
 

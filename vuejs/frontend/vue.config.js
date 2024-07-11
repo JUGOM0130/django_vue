@@ -1,7 +1,8 @@
 const { defineConfig } = require('@vue/cli-service')
+const path = require('path');
 module.exports = defineConfig({
-  publicPath: "/",
-  outputDir: "../../djang-env/mainproject/dist/",
+  publicPath: process.env.NODE_ENV === 'production' ? '/' : '/',
+  outputDir: "../../avail/pdm/dist/",//staticDirとして設定
   assetsDir:  "static",
   indexPath: "../templates/index.html",
   transpileDependencies: true,
@@ -20,12 +21,16 @@ module.exports = defineConfig({
     top:{
       entry:'src/main.js',
       template:'public/index.html',
-      filename:'index.html'
+      filename:process.env.NODE_ENV === 'production'
+      ? path.resolve(__dirname, '../../avail/pdm/templates/index.html')
+      : "index.html",
     },
     tree:{
       entry:'src/entrysjs/tree.js',
       template:'public/tree.html',
-      filename:'tree.html'
+      filename:process.env.NODE_ENV === 'production'
+      ? path.resolve(__dirname, '../../avail/pdm/templates/tree.html')
+      : "tree.html",
     }
   },
 
