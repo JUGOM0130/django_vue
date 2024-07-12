@@ -23,6 +23,7 @@ const treeComponent2Click = () => {
       <v-main>
         <h1>TreeIndex(Menu)</h1>
         <h4 v-if="port_message_visible">※検証環境DjangoのPortは8001です</h4>
+        <a href="133.18.242.137/api/test">133.18.242.137</a>
         <div>
           <v-btn variant="outlined" @click="homeClick">HOME</v-btn>
           <v-btn variant="outlined" @click="treeClick">Tree</v-btn>
@@ -35,6 +36,4 @@ const treeComponent2Click = () => {
 
   </div>
 </template>
-<style scoped>
-
-</style>
+<style scoped></style>
