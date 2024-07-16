@@ -129,7 +129,7 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 STATICFILES_DIRS = [
-    os.path.join(BASE_DIR, 'pdm/dist/static'),
+    os.path.join(BASE_DIR, 'entrypoint/dist/static'),
 ]
 
 # Default primary key field type
