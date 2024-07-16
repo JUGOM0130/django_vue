@@ -10,5 +10,4 @@ router.register('code',CodeView)
 
 urlpatterns = [
     path('', include(router.urls)),
-    path('test/',views.test_view, name="testview")
 ]

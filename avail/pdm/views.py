@@ -7,7 +7,6 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework import status
 from .settings import DIGIT
-from django.shortcuts import render
 
 class CodeHeaderView(viewsets.ModelViewSet):
     queryset = CodeHeader.objects.all()
@@ -117,7 +116,3 @@ class CodeView(viewsets.ModelViewSet):
         return Response({'message': 'パラメータが不足しています。'}, status=555)
 
 
-def test_view(request):
-    print(request)
-    # return render(request, 'index.html')# template/index.htmlのはず
-    return render(request, 'tree.html')# template/index.htmlのはず
