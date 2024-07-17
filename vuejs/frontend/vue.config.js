@@ -18,12 +18,20 @@ module.exports = defineConfig({
     },
   },
   pages:{
+    /*
     top:{
       entry:'src/main.js',
       template:'public/index.html',
       filename:process.env.NODE_ENV === 'production'
       ? path.resolve(__dirname, '../../avail/entrypoint/templates/index.html')
       : "index.html",
+    },*/
+    login:{
+      entry:'src/entrysjs/login.js',
+      template:'public/login.html',
+      filename:process.env.NODE_ENV === 'production'
+      ? path.resolve(__dirname, '../../avail/entrypoint/templates/login.html')
+      : "login.html",
     },
     tree:{
       entry:'src/entrysjs/tree.js',

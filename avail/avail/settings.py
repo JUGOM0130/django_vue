@@ -35,7 +35,6 @@ ALLOWED_HOSTS = ["*"]
 # Application definition
 
 INSTALLED_APPS = [
-
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -45,7 +44,8 @@ INSTALLED_APPS = [
     'rest_framework',
     'corsheaders',
     'pdm',
-    'entrypoint'
+    'entrypoint',
+    'accounts'
 ]
 
 MIDDLEWARE = [
@@ -132,6 +132,7 @@ STATICFILES_DIRS = [
     os.path.join(BASE_DIR, 'entrypoint/dist/static'),
 ]
 
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
@@ -139,3 +140,16 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 CORS_ALLOW_ALL_ORIGINS = True
 #CORS_ALLOWED_ORIGINS = ["http://localhost:8080","http://localhost:8081"]
+
+# デフォルトで認証をONにする設定
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        #'accounts.auth.ExampleAuthentication',
+    ),
+    'DEFAULT_PERMISSION_CLASSES': (
+        #'rest_framework.permissions.IsAuthenticated',
+    )
+}
+
+LOGIN_URL = '/login/'  # ログインページのURLを指定
+LOGIN_REDIRECT_URL = '/'        # ログイン後のリダイレクト先のURLを指定
