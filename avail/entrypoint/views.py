@@ -15,6 +15,6 @@ class TreeViewClass(APIView):
     authentication_classes = (ExampleAuthentication,)        # 追加
     # permission_classes = (IsAuthenticated,)                  # 追加
 
-    def post(self, request, format=None):
+    def get(self, request, format=None):
         #return JsonResponse({'message': 'Yes'})
         return render(request, 'tree.html')
