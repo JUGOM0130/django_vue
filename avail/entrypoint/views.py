@@ -8,7 +8,7 @@ from accounts.auth import ExampleAuthentication            # 追加
 import json
 
 class LoginViewClass(APIView):
-    def post(self, request, format=None):
+    def get(self, request, format=None):
         return render(request, 'login.html')
 
 class TreeViewClass(APIView):
