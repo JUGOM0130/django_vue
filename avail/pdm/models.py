@@ -24,5 +24,5 @@ class Tree(models.Model):
     code = models.ForeignKey(Code,on_delete=models.CASCADE) # NumberManagementとのリレーション
     group_id = models.CharField(max_length=100)
     deep_level = models.IntegerField(verbose_name="階層")
-    children_id = models.IntegerField(verbose_name="子Id")
+    parent_id = models.IntegerField(verbose_name="親Id")
     
