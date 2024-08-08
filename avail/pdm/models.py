@@ -18,7 +18,7 @@ class Code(models.Model):
     create_at = models.DateTimeField(blank=False, null=False, auto_now_add=True,verbose_name="作成日時")
     update_at = models.DateTimeField(blank=False, null=False, auto_now=True,verbose_name="更新日時")
     def __str__(self):
-        return "{}-{}-{}".format(self.kind,self.en_number,self.number)
+        return "kind={} en_number={} number={}".format(self.kind,self.en_number,self.number)
 
 class Tree(models.Model):
     code = models.ForeignKey(Code,on_delete=models.CASCADE) # NumberManagementとのリレーション
