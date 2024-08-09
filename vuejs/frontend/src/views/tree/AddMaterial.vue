@@ -97,6 +97,8 @@ console.log(dynamicStyle)
                         <v-radio label="組" value="1"></v-radio>
                         <v-radio label="部品" value="2"></v-radio>
                         <v-radio label="購入品" value="3"></v-radio>
+                        <v-radio label="既存ツリー" value="4" :disabled=true></v-radio>
+                        <v-radio label="自由入力" value="5" :disabled=true></v-radio>
                     </v-radio-group>
                 </v-col>
                 <!-- 選択エリア -->
