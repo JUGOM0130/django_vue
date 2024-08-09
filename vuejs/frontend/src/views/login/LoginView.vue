@@ -34,7 +34,7 @@ const login = async () => {
         sessionStorage.clear();//セッションストレージをクリアする
         sessionStorage.setItem('user_id', user_id)
         sessionStorage.setItem('user_token', token)
-        window.location = '/app/tree'
+        window.location = '/tree'
     }else{
         alert(statusmessage)
     }

@@ -4,6 +4,10 @@ import { defineEmits, ref, onBeforeUpdate } from 'vue'
 import { useStore } from 'vuex';
 import qs from 'qs';
 
+
+// グローバルヘッダー設定
+axios.defaults.headers.common['My-Token'] = sessionStorage.getItem('user_token');
+
 const defaultErrorMessage = "AddMaterial.vueでエラー"
 const store = useStore();
 const DJANGO_BASEURL = process.env.VUE_APP_API_BASE_URL;
