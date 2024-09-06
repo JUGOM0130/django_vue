@@ -18,3 +18,6 @@ class TreeViewClass(APIView):
     def get(self, request, format=None):
         #return JsonResponse({'message': 'Yes'})
         return render(request, 'tree.html')
+    
+
+    ##window.locationのヘッダに認証情報を混ぜる方法を検証

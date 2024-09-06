@@ -21,17 +21,18 @@ module.exports = defineConfig({
     /*
     top:{
       entry:'src/main.js',
-      template:'public/index.html',
+      template:'public/index.html', //ここをfilenameと合わせないとエラーする
       filename:process.env.NODE_ENV === 'production'
       ? path.resolve(__dirname, '../../avail/entrypoint/templates/index.html')
-      : "index.html",
+      : "index.html", //pagesブロックにindex.htmlがあるとBASEURLでアクセスした時に一番に開かれる
     },*/
     login:{
       entry:'src/entrysjs/login.js',
-      template:'public/login.html',
+      template:'public/index.html',
+      title:"login",
       filename:process.env.NODE_ENV === 'production'
       ? path.resolve(__dirname, '../../avail/entrypoint/templates/login.html')
-      : "login.html",
+      : "index.html",
     },
     tree:{
       entry:'src/entrysjs/tree.js',
