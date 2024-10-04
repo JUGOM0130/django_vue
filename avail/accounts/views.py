@@ -13,6 +13,8 @@ from rest_framework.permissions import AllowAny
 ユーザ作成処理
 '''
 class RegisterView(APIView):
+    authentication_classes = []  # 認証を無効にする
+    
     @staticmethod
     def post(request, *args, **kwargs):
         print(request.data)
@@ -45,7 +47,8 @@ class LoginView(GenericAPIView):
     """ログインAPIクラス"""
     permission_classes = [AllowAny]
     serializer_class = LoginSerializer
-
+    authentication_classes = []  # 認証を無効にする
+    
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         if serializer.is_valid(raise_exception=True):

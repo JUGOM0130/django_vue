@@ -138,13 +138,19 @@ STATICFILES_DIRS = [
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# CORS settings
+CORS_ALLOW_HEADERS = '*'
+# CORS_ALLOW_HEADERS = ['my-token']
+
 CORS_ALLOW_ALL_ORIGINS = True
 #CORS_ALLOWED_ORIGINS = ["http://localhost:8080","http://localhost:8081"]
+
+
 
 # デフォルトで認証をONにする設定
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        #'accounts.auth.ExampleAuthentication',
+        'accounts.auth.ExampleAuthentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': (
         #'rest_framework.permissions.IsAuthenticated',
@@ -152,4 +158,5 @@ REST_FRAMEWORK = {
 }
 
 LOGIN_URL = '/login/'  # ログインページのURLを指定
-LOGIN_REDIRECT_URL = '/'        # ログイン後のリダイレクト先のURLを指定
+LOGIN_REDIRECT_URL = '/'        # ログイン後のリダイレクト先のURLを指
+

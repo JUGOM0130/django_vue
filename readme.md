@@ -1,3 +1,13 @@
+# todo
+```bash
+git clone git@github.com
+cd avail
+python manage.py runserver.py
+
+cd vue/frontend
+npm install
+npm run serve
+```
 # プロジェクト作成
 ```cmd
 //プロジェクト作成

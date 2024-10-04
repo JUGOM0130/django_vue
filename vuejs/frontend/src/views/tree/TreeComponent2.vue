@@ -9,6 +9,9 @@ import { useStore } from 'vuex';
 import AddMaterial from './AddMaterial.vue';
 import axios from 'axios';
 
+// グローバルヘッダー設定
+axios.defaults.headers.common['My-Token'] = sessionStorage.getItem('user_token');
+
 const defaultErrorMessage = "TreeComponent2.vue内でエラー";
 const store = useStore();
 const DJANGO_BASEURL=process.env.VUE_APP_API_BASE_URL;
@@ -37,6 +40,8 @@ const getMaterial = async () => {
         .catch(error => {
             console.error(error);
             alert(defaultErrorMessage)
+
+            //403ならloginにリダイレクト？
         });
 }
 
