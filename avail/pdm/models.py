@@ -26,3 +26,10 @@ class Tree(models.Model):
     deep_level = models.IntegerField(verbose_name="階層")
     parent_id = models.IntegerField(verbose_name="親Id")
     
+class RootNode(models.Model):
+    node_name = models.CharField(max_length=100,unique=True)
+    create_at = models.DateTimeField(blank=False, null=False, auto_now_add=True,verbose_name="作成日時")
+    update_at = models.DateTimeField(blank=False, null=False, auto_now=True,verbose_name="更新日時")
+   
+    def __str__(self):
+        return self.node_name

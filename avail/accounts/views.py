@@ -14,6 +14,8 @@ from rest_framework.permissions import AllowAny
 '''
 class RegisterView(APIView):
     authentication_classes = []  # 認証を無効にする
+    # 登録データはこんな感じ
+    # {"user_id":"","comment":"","password":"","password_confirmation":""}
     
     @staticmethod
     def post(request, *args, **kwargs):

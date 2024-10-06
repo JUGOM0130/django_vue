@@ -9,6 +9,10 @@ const id = ref('');
 const pw = ref('')
 const message = ref('ログインして下さい')
 const visible = ref(false)
+
+// グローバルヘッダー設定(認証情報のクリア)
+axios.defaults.headers.common['My-Token'] = sessionStorage.setItem('user_token','');
+
 /**
  * ログイン認証処理
  */

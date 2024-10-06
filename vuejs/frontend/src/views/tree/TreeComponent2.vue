@@ -8,9 +8,7 @@ import TreeRightClickMenu from './TreeRightClickMenu.vue'
 import { useStore } from 'vuex';
 import AddMaterial from './AddMaterial.vue';
 import axios from 'axios';
-
-// グローバルヘッダー設定
-axios.defaults.headers.common['My-Token'] = sessionStorage.getItem('user_token');
+import qs from 'qs';
 
 const defaultErrorMessage = "TreeComponent2.vue内でエラー";
 const store = useStore();
@@ -27,6 +25,11 @@ let data = ref([
     { id: "140", group_id: "1", deep_level: "3", parent_id: "5", code_id: "ALD-A0006" },
     { id: "141", group_id: "1", deep_level: "4", parent_id: "140", code_id: "ALD-A0007" }
 ])
+let root_node = ref('');
+let root_node_temp = ref('');
+
+// グローバルヘッダー設定
+axios.defaults.headers.common['My-Token'] = sessionStorage.getItem('user_token');
 
 /**
  * 同期処理でコードのヘッダーを一覧で取得してくるメソッド
@@ -67,11 +70,8 @@ const createTreeMethod = () => {
     parent_id_array = data.value.map(e => e.parent_id)//オブジェクト配列から特定のキーを取り除いて新しい配列を返す
     parent_id_array = [...new Set(parent_id_array)]//配列から重複値を取り除いた新しい配列を返す
 
-    console.log("1", data.value)
 
-    parent_id_array.forEach((e, i) => {
-
-        let parent_index = i;
+    parent_id_array.forEach((e) => {
 
         //e.parentid
         let targeta = data.value.filter(fe => fe.parent_id == String(e)).sort((uu, yy) => {
@@ -82,8 +82,6 @@ const createTreeMethod = () => {
             if (aa > bb) return 1;
             return 0;
         });
-
-        console.log("2", parent_index, targeta)
 
         targeta.reverse().forEach(t => {
             if (t.parent_id != "0") {
@@ -161,7 +159,9 @@ const getMenuState = () => {
     menu2visible.value = store.state.tree_header_list_visible;
 }
 
-/**DOM更新前処理*/
+/**
+ * DOM更新前処理
+ */
 onBeforeUpdate(() => {
     const { id, group_id, deep_level, parent_id, code_id } = store.state.new_object
 
@@ -179,12 +179,59 @@ onBeforeUpdate(() => {
     }
 })
 
+/**
+ * ルートノード決定ボタンクリック時イベント
+ */
+const rootNodeDecisionBtnClick = async ()=>{
+    /**
+     * root_node追加処理とバリデーション
+     * DBへ追加API作成
+     */
+    await axios.post(
+        `${DJANGO_BASEURL}/api/rootnode/`,
+        qs.stringify({
+            "node_name":root_node_temp.value
+        })
+    ).then((res)=>{
+        let {id,node_name} = res.data;
 
+        root_node.value = root_node_temp.value; //仮のRoot名を決定する
+        data.value = [                          //ツリー構成配列のリセット
+            {
+                id: id,
+                group_id: node_name,
+                deep_level: "1",
+                parent_id: "0",
+                code_id: node_name
+            }
+        ];
+    }).catch((error)=>{
+        console.error(defaultErrorMessage,error)
+        alert(error.response.data.node_name)
+        root_node_temp.value = "";
+    })
+}
 </script>
+
+
 
 <template>
     <div>
-        <ul>
+        <v-container v-if="root_node==''">
+            <v-row class="mb-0 pb-0">
+                <v-col>
+                    <!-- dense : フィールド自体が少し小さくなります。 -->
+                    <!-- hide-details : v-text-fieldにある（v-messagesによって確保されている）領域が不要な場合、スペースを隠すことが可能 -->
+                    <v-text-field v-model="root_node_temp" label="ツリーのルート要素を入力してください" class="my-0" dense hide-details></v-text-field>
+                </v-col>
+            </v-row>
+            <v-row class="my-0 py-0">
+                <v-col class="my-0 py-0">
+                    <v-btn variant="outlined" @click="rootNodeDecisionBtnClick">決定</v-btn>
+                </v-col>
+            </v-row>
+        </v-container>
+        <ul v-if="root_node!=''">
             <li v-for="(d, index) in data" :key="d.id" @click.right.prevent="rightClick" :id="index">
                 <div v-for="n in Number(d.deep_level)" :key="n + d.id" class="space"></div>
                 {{ d.code_id }}

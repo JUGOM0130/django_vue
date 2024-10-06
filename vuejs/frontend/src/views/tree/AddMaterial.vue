@@ -24,9 +24,9 @@ onBeforeUpdate(() => {
     /*非同期処理が追いつかない場合があるので、DOM更新の前に変数へ値を代入して選択値を表示されるようにする */
     const Combobox_visble = store.state.tree_header_list_visible;
     if (Combobox_visble && material_object.length == 0) {
-        material_object = store.state.material_list
-        material = material_object.map(m => m.name)/*オブジェクト配列からnameキーを取り出して配列にして返す */
-        cmbdt.value = material[0]
+        material_object = store.state.material_list;    /*[ALD,CLS,・・・]コードヘッダのデータをVuexから取得 */
+        material = material_object.map(m => m.name);    /*オブジェクト配列からnameキーを取り出して配列にして返す */
+        cmbdt.value = material[0];                      /*コンボBOXの初期値を設定する*/
     }
 })
 
@@ -37,44 +37,52 @@ const close = () => {
     store.commit('HideHeaderList')
     emit('showVisble')
 }
+
+
+
 /**
  * 決定ボタン押下時処理
  */
 const btn_kettei = async () => {
+    const NOTDATA = -1;
     let index = material.indexOf(cmbdt.value)
+    
+    if(index == NOTDATA){
+        /*[ALD,CLA,…]データが無い場合 */
+        alert("error データがありませんDB確認してください\ntable名:codeheader\nファイル名:"+defaultErrorMessage)
+    }else{
+        /*パラメータセット */
+        let param = {
+            code_header: material_object[index].id,
+            kind: kind.value
+        }
+        /*APIコール */
+        await axios.post(
+            `${DJANGO_BASEURL}/api/code/maxCode/`,
+            qs.stringify(param)/**クエリストリングの生成 （シリアライズ＝直列化）*/
+        )
+            .then((response) => {
+                let d = response.data
+                let pyload = { id: d.code_id, code_id: d.code }
+                store.commit('SetAddTarget', pyload)
+            })
+            .catch(error => {
+                console.error(error)
+                alert(defaultErrorMessage)
+            })
 
-    /*パラメータセット */
-    let param = {
-        code_header: material_object[index].id,
-        kind: kind.value  /**ここ1~3に要修正 */
+        /**ツリーで選択済のオブジェクトを取得 分割代入*/
+        /**オブジェクトの値は全て文字列にする必要がある */
+        const { id, group_id, deep_level } = store.state.select_object
+        let pyload = {
+            id: String(store.state.add_target_code.id),
+            group_id: String(group_id),
+            deep_level: String((Number(deep_level) + 1)),
+            parent_id: String(id),
+            code_id: store.state.add_target_code.code_id
+        }
+        store.commit('SetNewObject', pyload)
     }
-    /*APIコール */
-    await axios.post(
-        `${DJANGO_BASEURL}/api/code/maxCode/`,
-        qs.stringify(param)/**クエリストリングの生成 （シリアライズ＝直列化）*/
-    )
-        .then((response) => {
-            let d = response.data
-            let pyload = { id: d.code_id, code_id: d.code }
-            store.commit('SetAddTarget', pyload)
-        })
-        .catch(error => {
-            console.error(error)
-            alert(defaultErrorMessage)
-        })
-
-    /**ツリーで選択済のオブジェクトを取得 分割代入*/
-    /**オブジェクトの値は全て文字列にする必要がある */
-    const { id, group_id, deep_level } = store.state.select_object
-    let pyload = {
-        id: String(store.state.add_target_code.id),
-        group_id: String(group_id),
-        deep_level: String((Number(deep_level) + 1)),
-        parent_id: String(id),
-        code_id: store.state.add_target_code.code_id
-    }
-    store.commit('SetNewObject', pyload)
-
 
     /**メニュー閉じる */
     close()

@@ -1,7 +1,7 @@
 # 以下を上書き
 from rest_framework import viewsets
-from .models import Code,CodeHeader,Tree
-from .serializers import CodeHeaderSerializer,CodeSerializer
+from .models import Code,CodeHeader,Tree,RootNode
+from .serializers import CodeHeaderSerializer,CodeSerializer,RootNodeSerializer
 from django.db.models import Max
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -169,3 +169,6 @@ class CodeView(viewsets.ModelViewSet):
         return Response({'message': 'パラメータが不足しています。'}, status=555)
 
 
+class RootNodeView(viewsets.ModelViewSet):
+    queryset = RootNode.objects.all()
+    serializer_class = RootNodeSerializer
