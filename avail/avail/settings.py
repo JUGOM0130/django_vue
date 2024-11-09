@@ -45,7 +45,8 @@ INSTALLED_APPS = [
     'corsheaders',
     'pdm',
     'entrypoint',
-    'accounts'
+    'accounts',
+    'pdm2'
 ]
 
 MIDDLEWARE = [
@@ -150,11 +151,11 @@ CORS_ALLOW_ALL_ORIGINS = True
 # デフォルトで認証をONにする設定
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        'accounts.auth.ExampleAuthentication',
+        #'accounts.auth.ExampleAuthentication',#認証させる設定
     ),
     'DEFAULT_PERMISSION_CLASSES': (
         #'rest_framework.permissions.IsAuthenticated',
-    )
+    ),
 }
 
 LOGIN_URL = '/login/'  # ログインページのURLを指定
