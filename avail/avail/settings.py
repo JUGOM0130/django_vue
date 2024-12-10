@@ -46,7 +46,9 @@ INSTALLED_APPS = [
     'pdm',
     'entrypoint',
     'accounts',
-    'pdm2'
+    'pdm2',
+    'pdm3'
+
 ]
 
 MIDDLEWARE = [
