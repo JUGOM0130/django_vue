@@ -15,13 +15,14 @@ class Tree(models.Model):
     """ツリー自体を表すモデル。使い回される"""
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True, null=True)
+    version = models.IntegerField(default=0)  # ツリーバージョン
     create_at = models.DateTimeField(auto_now_add=True, verbose_name="作成日時")
     update_at = models.DateTimeField(auto_now=True, verbose_name="更新日時")
 
     def __str__(self):
-        return self.name
+        return f"{self.name}, Version: {self.version}"
 
-class ParentChild(models.Model):
+class TreeStructure(models.Model):
     """親子関係を管理する中間モデル。特定のツリー内での親子関係を表す"""
     parent = models.ForeignKey(Node, on_delete=models.CASCADE, related_name='children')
     child = models.ForeignKey(Node, on_delete=models.CASCADE, related_name='parents')
@@ -31,23 +32,21 @@ class ParentChild(models.Model):
     update_at = models.DateTimeField(auto_now=True, verbose_name="更新日時")
 
     def __str__(self):
-        return f"{self.parent.name} -> {self.child.name} in {self.tree.name}"
+        return f"{self.parent.name} -> {self.child.name} in {self.tree.name} (Level: {self.level})"
 
     class Meta:
         unique_together = ('parent', 'child', 'tree')
 
-
-class TreeInstance(models.Model):
-    """特定の文脈で使い回されるツリーのインスタンス"""
-    tree = models.ForeignKey(Tree, on_delete=models.CASCADE, related_name='instances')
-    instance_name = models.CharField(max_length=100)
-    instance_description = models.TextField(blank=True, null=True)
+class TreeVersion(models.Model):
+    """特定の文脈で使い回されるツリーのバージョン"""
+    tree = models.ForeignKey(Tree, on_delete=models.CASCADE, related_name='versions')
+    version_name = models.CharField(max_length=100)
+    version_description = models.TextField(blank=True, null=True)
     create_at = models.DateTimeField(auto_now_add=True, verbose_name="作成日時")
     update_at = models.DateTimeField(auto_now=True, verbose_name="更新日時")
 
     def __str__(self):
-        return self.instance_name
-
+        return self.version_name
 
 class Prefix(models.Model):
     """コード生成のためのプレフィックスモデル"""
@@ -67,7 +66,7 @@ class Prefix(models.Model):
 
 class CodeCounter(models.Model):
     """プレフィックスごとのカウンターと版数を管理するモデル"""
-    prefix = models.ForeignKey(Prefix, on_delete=models.CASCADE, related_name="counters")  # プレフィックスとの関連
+    prefix = models.ForeignKey(Prefix, on_delete=models.CASCADE, related_name="counters")
     current_number = models.PositiveIntegerField(default=0)  # 現在の採番値
     current_version = models.PositiveIntegerField(default=0)  # 現在の版数
 
@@ -84,9 +83,10 @@ class CodeVersion(models.Model):
 
 class CodeVersionHistory(models.Model):
     """コードのバージョン履歴を管理するテーブル"""
+    node = models.ForeignKey(Node, on_delete=models.CASCADE, related_name='version_histories')  # ノードとの関連
     code = models.CharField(max_length=50)  # バージョン履歴に含まれるコード
     version = models.IntegerField()  # バージョン番号
     datetime_created = models.DateTimeField(auto_now_add=True, verbose_name="作成日時")  # バージョンが作成された日時
 
     def __str__(self):
-        return f"{self.code}, Z{self.version:04d} at {self.datetime_created}"
+        return f"{self.node.name}: {self.code}, Z{self.version:04d} at {self.datetime_created}"

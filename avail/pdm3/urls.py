@@ -2,15 +2,15 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 
 # シンプルなViewSet
-from .views import NodeViewSet, TreeViewSet, ParentChildViewSet, TreeInstanceViewSet,PrefixViewSet
+from .views import NodeViewSet, TreeViewSet, TreeStructureViewSet, TreeVersionViewSet,PrefixViewSet
 # シンプルではないViewset
 from .views import CodeGenerationView,CodeUpdateView,CodeVersionHistoryView,AllCodeVersionHistoryView
 
 router = DefaultRouter()
 router.register(r'nodes', NodeViewSet)
 router.register(r'trees', TreeViewSet)
-router.register(r'parent-child', ParentChildViewSet)
-router.register(r'tree-instances', TreeInstanceViewSet)
+router.register(r'tree-structure', TreeStructureViewSet)
+router.register(r'tree-version', TreeVersionViewSet)
 router.register(r'prefix', PrefixViewSet)
 
 urlpatterns = [

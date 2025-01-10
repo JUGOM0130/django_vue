@@ -1,8 +1,8 @@
 from rest_framework import viewsets
 from .models import (Node,
                     Tree,
-                    ParentChild,
-                    TreeInstance,
+                    TreeStructure,
+                    TreeVersion,
                     Prefix,
                     CodeVersion,
                     CodeVersionHistory
@@ -10,8 +10,8 @@ from .models import (Node,
 
 from .serializers import (NodeSerializer,
                           TreeSerializer,
-                          ParentChildSerializer,
-                          TreeInstanceSerializer,
+                          TreeStructureSerializer,
+                          TreeVersionSerializer,
                           PrefixSerializer,
                           CodeUpdateSerializer,
                           CodeVersionHistorySerializer
@@ -25,13 +25,13 @@ class TreeViewSet(viewsets.ModelViewSet):
     queryset = Tree.objects.all()
     serializer_class = TreeSerializer
 
-class ParentChildViewSet(viewsets.ModelViewSet):
-    queryset = ParentChild.objects.all()
-    serializer_class = ParentChildSerializer
+class TreeStructureViewSet(viewsets.ModelViewSet):
+    queryset = TreeStructure.objects.all()
+    serializer_class = TreeStructureSerializer
 
-class TreeInstanceViewSet(viewsets.ModelViewSet):
-    queryset = TreeInstance.objects.all()
-    serializer_class = TreeInstanceSerializer
+class TreeVersionViewSet(viewsets.ModelViewSet):
+    queryset = TreeVersion.objects.all()
+    serializer_class = TreeVersionSerializer
 
 class PrefixViewSet(viewsets.ModelViewSet):
     """Prefix を登録する API"""

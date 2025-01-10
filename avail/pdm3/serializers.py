@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Node, Tree, ParentChild, TreeInstance,Prefix,CodeVersion,CodeVersionHistory
+from .models import Node, Tree, TreeStructure, TreeVersion,Prefix,CodeVersion,CodeVersionHistory
 from .models import Prefix
 
 class NodeSerializer(serializers.ModelSerializer):
@@ -12,14 +12,14 @@ class TreeSerializer(serializers.ModelSerializer):
         model = Tree
         fields = '__all__'
 
-class ParentChildSerializer(serializers.ModelSerializer):
+class TreeStructureSerializer(serializers.ModelSerializer):
     class Meta:
-        model = ParentChild
+        model = TreeStructure
         fields = '__all__'
 
-class TreeInstanceSerializer(serializers.ModelSerializer):
+class TreeVersionSerializer(serializers.ModelSerializer):
     class Meta:
-        model = TreeInstance
+        model = TreeVersion
         fields = '__all__'
 
 
