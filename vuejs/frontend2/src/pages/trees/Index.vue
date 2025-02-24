@@ -1,8 +1,10 @@
 <script setup>
 import {ref,onMounted} from 'vue';
 import {getAllTree} from '@/api/tree';
+import {useRouter} from 'vue-router';
 
 
+const router = useRouter();
 const items = ref([{
         "id": 0,
         "name": "",
@@ -35,7 +37,8 @@ const fetchTrees = async () => {
         update_at: new Date(item.update_at).toLocaleString()
     }))  // または response.data.data (APIの構造による)
   } catch (error) {
-    console.error('Error:', error)
+    console.error('Error:', error);
+    errorMessage.value = 'データの取得に失敗しました。';
   }
 }
 
@@ -44,7 +47,8 @@ const fetchTrees = async () => {
  */
 
 const editTree = (item) => {
-    console.log(item.id);
+    const record_id = item.id;
+    router.push({name:'create_structure',query: {id: record_id}})
 };
 
 
@@ -65,6 +69,7 @@ onMounted(async() => {
             <v-col>
                 <!-- テーブル部分 -->
                 <v-data-table
+                    v-if="items.length > 0"
                     :items="items"
                     :headers="headers"
                     item-key="id"
