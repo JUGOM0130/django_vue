@@ -10,15 +10,15 @@ const routes = [
   {
     path: '/test',
     name: 'test',
-    component: () => import('../views/tree/TreeIndex2.vue')
+    component: () => import('../c_tree/TreeIndex2.vue')
   },{
     path: '/treecomponent',
     name: 'treecomponent',
-    component: () => import('../views/tree/TreeComponent.vue')
+    component: () => import('../c_tree/TreeComponent.vue')
   },{
     path: '/treecomponent2',
     name: 'treecomponent2',
-    component: () => import('../views/tree/TreeComponent2.vue')
+    component: () => import('../c_tree/TreeComponent2.vue')
   },
 ]
 

@@ -35,11 +35,31 @@ module.exports = defineConfig({
       : "index.html",
     },
     tree:{
-      entry:'src/entrysjs/tree.js',
+      entry:'src/c_tree/entry.js',
       template:'public/tree.html',
       filename:process.env.NODE_ENV === 'production'
       ? path.resolve(__dirname, '../../avail/entrypoint/templates/tree.html')
       : "tree.html",
+    },pdm3:{
+      entry:'src/entrysjs/pdm3.js',
+      template:'public/pdm3.html',
+      filename:process.env.NODE_ENV === 'production'
+      ? path.resolve(__dirname, '../../avail/entrypoint/templates/pdm3.html')
+      : "pdm3.html",
+    },
+    prefix:{
+      entry:'src/c_prefix/index.js',
+      template:'public/prefix.html',
+      filename:process.env.NODE_ENV === 'production'
+      ? path.resolve(__dirname, '../../avail/entrypoint/templates/prefix.html')
+      : "prefix.html",
+    },
+    node:{
+      entry:'src/c_node/index.js',
+      template:'public/node.html',
+      filename:process.env.NODE_ENV === 'production'
+      ? path.resolve(__dirname, '../../avail/entrypoint/templates/node.html')
+      : "node.html",
     }
   },
 
@@ -47,5 +67,12 @@ module.exports = defineConfig({
     vuetify: {
 			// https://github.com/vuetifyjs/vuetify-loader/tree/next/packages/vuetify-loader
 		}
-  }
+  },
+  configureWebpack: {
+    resolve: {
+      alias: {
+        '@': path.resolve(__dirname, 'src'),
+      },
+    },
+  },
 })

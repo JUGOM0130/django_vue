@@ -6,6 +6,7 @@ djang-env
 django-env*
 djangotest
 avail_old
+env/
 
 # vue
 testvue

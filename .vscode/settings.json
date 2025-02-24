@@ -3,5 +3,17 @@
     "editor.wordWrap": "on",
     "python.analysis.extraPaths": [
         "/root/workspace/djang-env/lib/python3.9/site-packages"
-      ]
+      ],
+    "files.exclude": {
+      "**/__pycache__": true
+    },
+
+    //@補完が聞くように
+    "typescript.tsdk": "node_modules/typescript/lib",
+    "editor.quickSuggestions": {
+      "strings": true
+    },
+    "javascript.suggest.paths": true,
+    "typescript.suggest.paths": true
+    
 }
