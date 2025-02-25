@@ -5,10 +5,10 @@ import { createRouter, createWebHistory } from 'vue-router'
 const routes = [
   {
     path: '/',
-    name: 'Index',
-    component: () => import('./Index.vue'),
+    name: 'node_list',
+    component: () => import('./NodeList.vue'),
     meta: {
-      title: 'index'
+      title: 'Node List'
     }
   }]
 

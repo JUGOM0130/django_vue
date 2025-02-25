@@ -2,7 +2,7 @@
 import { getTree } from '@/api/tree';
 import { ref, onMounted, onUnmounted } from 'vue';
 import { useRoute } from 'vue-router';
-
+import NodeListLightVersion from '../nodes/NodeListLightVersion.vue';
 
 
 const router = useRoute();
@@ -18,6 +18,11 @@ const menuPosition = ref({
   top: '0px',
   left: '0px'
 })
+
+// モーダルの表示制御用
+const isModalOpen = ref(false);
+
+
 
 // メニューを表示する
 const showContextMenu = (event) => {
@@ -41,6 +46,7 @@ const closeMenu = () => {
 // メニューアクション
 const menuAction1 = () => {
   console.log('メニュー1がクリックされました')
+  isModalOpen.value = true; // モーダルを表示
   closeMenu()
 }
 
@@ -104,6 +110,19 @@ onUnmounted(() => {
         <li @click="menuAction3">メニュー3</li>
       </ul>
     </div>
+
+    <!-- モーダル -->
+    <v-dialog v-model="isModalOpen" width="auto">
+      <v-card>
+        <v-card-title>
+          Node List
+          <v-btn icon="mdi-close" @click="isModalOpen = false" class="float-right"></v-btn>
+        </v-card-title>
+        <v-card-text>
+          <NodeListLightVersion />
+        </v-card-text>
+      </v-card>
+    </v-dialog>
   </v-container>
 </template>
 
@@ -139,5 +158,9 @@ onUnmounted(() => {
 
 .context-menu li:hover {
   background-color: #f0f0f0;
+}
+
+.float-right {
+  float: right;
 }
 </style>
