@@ -14,6 +14,12 @@
       "strings": true
     },
     "javascript.suggest.paths": true,
-    "typescript.suggest.paths": true
+    "typescript.suggest.paths": true,
     
+    "typescript.preferences.importModuleSpecifier": "shortest",
+    "javascript.preferences.importModuleSpecifier": "shortest",
+    "eslint.validate": ["javascript", "javascriptreact", "vue"],
+    "editor.formatOnSave": true,
+
+    "recommendations": ["Vue.volar"]
 }
