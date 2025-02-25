@@ -10,3 +10,7 @@ env/
 
 # vue
 testvue
+
+
+# db
+*.sqlite3
