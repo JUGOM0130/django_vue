@@ -56,6 +56,7 @@ class PrefixViewSet(viewsets.ModelViewSet):
     queryset = Prefix.objects.all()
     serializer_class = PrefixSerializer
 
+
 class CodeGenerationView(APIView):
     """
     Prefixに基づいてコードを生成し、CodeVersionモデルに登録するAPIビュー
@@ -63,17 +64,26 @@ class CodeGenerationView(APIView):
     def post(self, request, *args, **kwargs):
         serializer = CodeGenerationSerializer(data=request.data)
         if serializer.is_valid():
-            prefix_name = serializer.validated_data["prefix"]
+            prefix_id = serializer.validated_data["prefix"]
             try:
-                prefix = Prefix.objects.get(name=prefix_name)
+                prefix = Prefix.objects.get(id=prefix_id)
+            except Prefix.DoesNotExist:
+                return Response({"error": "Prefix not found"}, status=status.HTTP_404_NOT_FOUND)
+            
+            try:
                 code = generate_code(prefix)
                 CodeVersion.objects.create(code=code, version=0)
-                CodeVersionHistory.objects.create(code=code, version=0)
+                
+                # 新しいノードを作成
+                node = Node.objects.create(name=code, description=f"")
+                
+                # CodeVersionHistory にノードの ID を設定
+                CodeVersionHistory.objects.create(code=code, version=0, node_id=node.id)
+                
                 return Response({"code": code}, status=status.HTTP_201_CREATED)
             except ValueError as e:
                 return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response

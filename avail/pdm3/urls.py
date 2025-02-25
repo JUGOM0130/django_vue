@@ -7,8 +7,8 @@ from .views import NodeViewSet, TreeViewSet, TreeStructureViewSet, TreeVersionVi
 from .views import CodeGenerationView,CodeUpdateView,CodeVersionHistoryView,AllCodeVersionHistoryView
 
 router = DefaultRouter()
-router.register(r'nodes', NodeViewSet)
-router.register(r'trees', TreeViewSet)
+router.register(r'node', NodeViewSet)
+router.register(r'tree', TreeViewSet)
 router.register(r'tree-structure', TreeStructureViewSet)
 router.register(r'tree-version', TreeVersionViewSet)
 router.register(r'prefix', PrefixViewSet)
