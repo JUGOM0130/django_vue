@@ -1,6 +1,6 @@
 <script setup>
 import { getTree } from '@/api/tree';
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import NodeListLightVersion from '../nodes/NodeListLightVersion.vue';
 
@@ -9,6 +9,9 @@ const router = useRoute();
 const errorMessage = ref('');
 const id = ref('');
 const name = ref('');
+const receiveData = ref({ id: '', name: '' });
+const treeStructure = ref([{ id: '', name: '' }])
+
 
 /**
  * 右クリック 状態の定義
@@ -19,7 +22,9 @@ const menuPosition = ref({
   left: '0px'
 })
 
-// モーダルの表示制御用
+/**
+ *  モーダルの表示制御用
+ */
 const isModalOpen = ref(false);
 
 
@@ -44,8 +49,8 @@ const closeMenu = () => {
 }
 
 // メニューアクション
-const menuAction1 = () => {
-  console.log('メニュー1がクリックされました')
+const openRegistedNodeListView = () => {
+  console.log('openRegistedNodeListViewがクリックされました')
   isModalOpen.value = true; // モーダルを表示
   closeMenu()
 }
@@ -65,11 +70,42 @@ const fetchTrees = async (id) => {
   try {
     const response = await getTree(id);
     name.value = response.data.name;
+
+    //配列初期化
+    treeStructure.value = [];
+    treeStructure.value.push({
+      id: id,
+      name: name.value
+    });
   } catch (error) {
     console.error("Error fetching tree data:", error);
     errorMessage.value = 'Failed to load tree data. Please try again later.';
   }
 };
+
+/**
+ * 子コンポーネントからデータを受け取る
+ * @param {Object} node 
+ */
+const handleNode = (node) => {
+  // 受け取ったデータを格納 → watchによってcreatStructureへ追加される
+  receiveData.value = node;
+
+  // モーダルを閉じる
+  isModalOpen.value = false;
+  // メニューを閉じる
+  isShowMenu.value = false;
+}
+
+/**
+ * 変数に変化が合った場合のイベントを定義
+ */
+watch(receiveData, (newValue, oldValue) => {
+  treeStructure.value.push({
+    id: receiveData.value.id,
+    name: receiveData.value.name
+  });
+})
 
 /**
  * コンポーネントの初期化
@@ -98,14 +134,14 @@ onUnmounted(() => {
     <p v-if="errorMessage">{{ errorMessage }}</p>
 
     <!--正常な場合-->
-    <p v-else @contextmenu.prevent="showContextMenu">
-      {{ id }} - {{ name }}
+    <p v-for="item in treeStructure" :key="item.id" @contextmenu.prevent="showContextMenu">
+      {{ item.id }} - {{ item.name }}
     </p>
 
     <!-- コンテキストメニュー(右クリックメニュー) -->
     <div v-if="isShowMenu" :style="menuPosition" class="context-menu">
       <ul>
-        <li @click="menuAction1">メニュー1</li>
+        <li @click="openRegistedNodeListView">登録済みノード一覧</li>
         <li @click="menuAction2">メニュー2</li>
         <li @click="menuAction3">メニュー3</li>
       </ul>
@@ -119,7 +155,9 @@ onUnmounted(() => {
           <v-btn icon="mdi-close" @click="isModalOpen = false" class="float-right"></v-btn>
         </v-card-title>
         <v-card-text>
-          <NodeListLightVersion />
+          <!-- ノード一覧 -->
+          <!-- @data-sentが子コンポーネントから発火されるとhandleNodeイベントが発火する -->
+          <NodeListLightVersion @data-sent="handleNode" />
         </v-card-text>
       </v-card>
     </v-dialog>

@@ -1,6 +1,10 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, defineEmits } from 'vue'
 import { getAllNode } from '@/api/node'
+
+
+// 親コンポーネントにデータを送信する
+const emit = defineEmits(['data-sent'])
 
 const nodes = ref([])
 
@@ -17,6 +21,16 @@ const fetchNodes = async () => {
 }
 
 /**
+ * 親コンポーネントへ送るデータ
+ * @param event 
+ * @param rowData 
+ */
+const sendDataToParent = (event, rowData) => {
+    const item = rowData.item;
+    emit('data-sent', { id: item.id, name: item.name });
+}
+
+/**
  * ページが読み込まれた時に実行
  */
 onMounted(async () => {
@@ -26,7 +40,7 @@ onMounted(async () => {
 
 <template>
     <v-container>
-        <v-data-table :items="nodes" density="compact">
+        <v-data-table :items="nodes" density="compact" @click:row="sendDataToParent">
 
         </v-data-table>
     </v-container>
