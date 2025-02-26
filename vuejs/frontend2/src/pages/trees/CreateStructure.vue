@@ -7,10 +7,19 @@ import NodeListLightVersion from '../nodes/NodeListLightVersion.vue';
 
 const router = useRoute();
 const errorMessage = ref('');
-const id = ref('');
-const name = ref('');
+const id = ref('');//treeのID
+const name = ref('');//treeのName
 const receiveData = ref({ id: '', name: '' });
-const treeStructure = ref([{ id: '', name: '' }])
+const treeStructure = ref([
+  {
+    id: '',//フロントエンド独自
+    name: '',//フロントエンド独自
+    parent: '',//親NodeID
+    child: '',//子NodeID
+    tree: '',//TreeID     基本的に変数idが入る
+    level: ''//階層Level
+  }
+])
 
 
 /**
