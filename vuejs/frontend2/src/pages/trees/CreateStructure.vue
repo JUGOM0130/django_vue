@@ -70,7 +70,6 @@ const closeMenu = () => {
 
 // メニューアクション
 const openRegistedNodeListView = () => {
-  console.log('openRegistedNodeListViewがクリックされました')
   isModalOpen.value = true; // モーダルを表示
   closeMenu()
 }
@@ -207,44 +206,7 @@ const organizedTree = computed(() => {
 
 
 
-/**
- * ノード追加時の処理を改善
- * @param parentNode 
- * @param newNode 
- */
-const addNode = (parentNode, newNode) => {
-  const newNodeData = {
-    id: newNode.id,
-    name: newNode.name,
-    parent: parentNode.id,
-    child: '',
-    tree: id.value,
-    level: parentNode.level + 1,
-  };
 
-  treeStructure.value.push(newNodeData);
-};
-
-/**
- * ドラッグ&ドロップ機能の追加
- * @param event 
- * @param item 
- */
-const handleDragStart = (event, item) => {
-  event.dataTransfer.setData('text/plain', item.id);
-};
-
-const handleDrop = (event, target) => {
-  const draggedId = event.dataTransfer.getData('text/plain');
-  const draggedNode = treeStructure.value.find(node => node.id === draggedId);
-
-  if (draggedNode && target.id !== draggedNode.id) {
-    draggedNode.parent = target.id;
-    draggedNode.level = target.level + 1;
-    // ツリー構造を更新
-    treeStructure.value = [...treeStructure.value];
-  }
-};
 
 
 
@@ -286,8 +248,6 @@ onUnmounted(() => {
 <template>
   <v-container>
 
-    <h1 @click="log">log</h1>
-
     <!--エラーの場合-->
     <p v-if="errorMessage">{{ errorMessage }}</p>
 
@@ -306,8 +266,8 @@ onUnmounted(() => {
       </div>
     </div>
 
-
-    <v-data-table :items="treeStructure" density="compact"></v-data-table>
+    <!--登録するデータを視覚化-->
+    <v-data-table :items="treeStructure" density="compact" v-show="false"></v-data-table>
 
 
     <!-- コンテキストメニュー(右クリックメニュー) -->
