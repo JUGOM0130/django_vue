@@ -40,7 +40,7 @@ onMounted(async () => {
 
 <template>
     <v-container>
-        <v-data-table :items="nodes" density="compact" @click:row="sendDataToParent" hover="true">
+        <v-data-table :items="nodes" density="compact" @click:row="sendDataToParent" :hover=true>
 
         </v-data-table>
     </v-container>

@@ -1,6 +1,6 @@
 <script setup>
 import { getTree } from '@/api/tree';
-import { ref, onMounted, onUnmounted, watch } from 'vue';
+import { ref, onMounted, onUnmounted, watch, computed } from 'vue';
 import { useRoute } from 'vue-router';
 import NodeListLightVersion from '../nodes/NodeListLightVersion.vue';
 
@@ -12,16 +12,14 @@ const name = ref('');//treeのName
 const receiveData = ref({ id: '', name: '' });
 const treeStructure = ref([
   {
-    id: '',//フロントエンド独自
-    name: '',//フロントエンド独自
-    parent: '',//親NodeID
-    child: '',//子NodeID
-    tree: '',//TreeID     基本的に変数idが入る
-    level: ''//階層Level
+    id: '',      // ノードID
+    name: '',    // ノード名
+    parent: '',  // 親ノードID
+    child: '',   // 子ノードID（単一）
+    tree: '',    // TreeID
+    level: 1     // 階層Level
   }
-])
-
-
+]);
 /**
  * 右クリック 状態の定義
  */
@@ -30,22 +28,35 @@ const menuPosition = ref({
   top: '0px',
   left: '0px'
 })
-
 /**
  *  モーダルの表示制御用
  */
 const isModalOpen = ref(false);
+/**
+ * 右クリックされた要素を保存するための変数を追加
+ */
+const selectedItem = ref(null);
+// TreeStructureの関係を保持するための配列
+const relationships = ref([]);
+
+
+
+
+
 
 
 
 // メニューを表示する
-const showContextMenu = (event) => {
+const showContextMenu = (event, item) => {
   // マウスの位置を取得
   menuPosition.value = {
     top: event.clientY + 'px',
     left: event.clientX + 'px'
   }
+  // メニュー表示フラグ
   isShowMenu.value = true
+  // 右クリックされた要素を保存
+  selectedItem.value = item;
 
   // メニュー以外をクリックした時にメニューを閉じる
   document.addEventListener('click', closeMenu)
@@ -74,37 +85,168 @@ const menuAction3 = () => {
   closeMenu()
 }
 
+const log = () => {
+  console.log(treeStructure.value);
+}
 
-const fetchTrees = async (id) => {
+
+
+const fetchTrees = async (treeId) => {
   try {
-    const response = await getTree(id);
-    name.value = response.data.name;
+    const response = await getTree(treeId);
+    const data = response.data;
+    name.value = data.name;
 
-    //配列初期化
+    // 配列初期化
     treeStructure.value = [];
+    relationships.value = [];
+
+    // ルートノードの追加
     treeStructure.value.push({
-      id: id,
-      name: name.value
+      id: data.id,
+      name: data.name,
+      parent: '', // ルートノードは親を持たない
+      child: '',  // 子ノードIDは後で設定
+      tree: treeId,
+      level: 1
     });
+
+    // リレーションシップの構築
+    if (data.relationships) {
+      data.relationships.forEach(rel => {
+        const relationship = {
+          parentId: rel.parent,
+          childId: rel.child,
+          level: rel.level,
+          treeId: treeId
+        };
+        relationships.value.push(relationship);
+
+        // 既存のノードの子ノードIDを更新
+        const parentNode = treeStructure.value.find(node => node.id === rel.parent);
+        if (parentNode) {
+          parentNode.child = rel.child;
+        }
+
+        // 子ノードを追加
+        treeStructure.value.push({
+          id: rel.child,
+          name: rel.child_name, // APIからの応答に含まれる想定
+          parent: rel.parent,
+          child: '',
+          tree: treeId,
+          level: rel.level
+        });
+      });
+    }
+
   } catch (error) {
     console.error("Error fetching tree data:", error);
     errorMessage.value = 'Failed to load tree data. Please try again later.';
   }
 };
 
+
 /**
  * 子コンポーネントからデータを受け取る
  * @param {Object} node 
  */
+// 新しいノードを追加する処理
 const handleNode = (node) => {
-  // 受け取ったデータを格納 → watchによってcreatStructureへ追加される
-  receiveData.value = node;
+  if (selectedItem.value) {
+    // 新しいノードのデータを作成
+    const newNode = {
+      id: node.id,
+      name: node.name,
+      parent: selectedItem.value.id,
+      child: '',  // 新規ノードは子を持たない
+      tree: id.value,
+      level: Number(selectedItem.value.level) + 1
+    };
 
-  // モーダルを閉じる
+    // 既存の親ノードを更新
+    const parentIndex = treeStructure.value.findIndex(n => n.id === selectedItem.value.id);
+    if (parentIndex !== -1) {
+      // 親ノードの子を設定
+      treeStructure.value[parentIndex] = {
+        ...treeStructure.value[parentIndex],
+        child: node.id
+      };
+    }
+
+    // 新しいノードを追加
+    treeStructure.value = [
+      ...treeStructure.value.slice(0, parentIndex + 1),
+      newNode,
+      ...treeStructure.value.slice(parentIndex + 1)
+    ];
+  }
+
+  // モーダルとメニューを閉じる
   isModalOpen.value = false;
-  // メニューを閉じる
   isShowMenu.value = false;
-}
+};
+
+// ツリー表示のための計算プロパティを修正
+const organizedTree = computed(() => {
+  return [...treeStructure.value].sort((a, b) => {
+    // まずレベルで比較
+    if (a.level !== b.level) {
+      return a.level - b.level;
+    }
+    // 同じレベルの場合は親ノードで比較
+    if (a.parent !== b.parent) {
+      return treeStructure.value.findIndex(n => n.id === a.parent)
+        - treeStructure.value.findIndex(n => n.id === b.parent);
+    }
+    // それも同じ場合はIDで比較
+    return treeStructure.value.findIndex(n => n.id === a.id)
+      - treeStructure.value.findIndex(n => n.id === b.id);
+  });
+});
+
+
+
+/**
+ * ノード追加時の処理を改善
+ * @param parentNode 
+ * @param newNode 
+ */
+const addNode = (parentNode, newNode) => {
+  const newNodeData = {
+    id: newNode.id,
+    name: newNode.name,
+    parent: parentNode.id,
+    child: '',
+    tree: id.value,
+    level: parentNode.level + 1,
+  };
+
+  treeStructure.value.push(newNodeData);
+};
+
+/**
+ * ドラッグ&ドロップ機能の追加
+ * @param event 
+ * @param item 
+ */
+const handleDragStart = (event, item) => {
+  event.dataTransfer.setData('text/plain', item.id);
+};
+
+const handleDrop = (event, target) => {
+  const draggedId = event.dataTransfer.getData('text/plain');
+  const draggedNode = treeStructure.value.find(node => node.id === draggedId);
+
+  if (draggedNode && target.id !== draggedNode.id) {
+    draggedNode.parent = target.id;
+    draggedNode.level = target.level + 1;
+    // ツリー構造を更新
+    treeStructure.value = [...treeStructure.value];
+  }
+};
+
+
 
 /**
  * 変数に変化が合った場合のイベントを定義
@@ -112,7 +254,11 @@ const handleNode = (node) => {
 watch(receiveData, (newValue, oldValue) => {
   treeStructure.value.push({
     id: receiveData.value.id,
-    name: receiveData.value.name
+    name: receiveData.value.name,
+    parent: selectedItem.value.id,
+    child: "",
+    tree: id.value,
+    level: Number(selectedItem.value.level) + 1,
   });
 })
 
@@ -139,13 +285,30 @@ onUnmounted(() => {
 
 <template>
   <v-container>
+
+    <h1 @click="log">log</h1>
+
     <!--エラーの場合-->
     <p v-if="errorMessage">{{ errorMessage }}</p>
 
-    <!--正常な場合-->
-    <p v-for="item in treeStructure" :key="item.id" @contextmenu.prevent="showContextMenu">
-      {{ item.id }} - {{ item.name }}
-    </p>
+    <div class="tree-view">
+      <div v-for="(item, index) in organizedTree" :key="item.id" :style="{
+        marginLeft: `${(item.level - 1) * 20}px`,
+        borderLeft: item.level > 1 ? '1px solid #ddd' : 'none'
+      }" class="tree-node" @contextmenu.prevent="(event) => showContextMenu(event, item)">
+        <div class="node-content">
+          <v-icon :color="item.child ? 'orange' : 'green'">
+            {{ item.child ? 'mdi-folder' : 'mdi-file' }}
+          </v-icon>
+          <span class="node-name">{{ item.name }}</span>
+          <span class="node-level">(Level: {{ item.level }})</span>
+        </div>
+      </div>
+    </div>
+
+
+    <v-data-table :items="treeStructure" density="compact"></v-data-table>
+
 
     <!-- コンテキストメニュー(右クリックメニュー) -->
     <div v-if="isShowMenu" :style="menuPosition" class="context-menu">
@@ -209,5 +372,26 @@ onUnmounted(() => {
 
 .float-right {
   float: right;
+}
+
+.tree-view {
+  padding: 20px;
+}
+
+.tree-node {
+  display: flex;
+  align-items: center;
+  padding: 8px;
+  margin: 4px 0;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.tree-node:hover {
+  background-color: #f5f5f5;
+}
+
+.node-name {
+  margin-left: 8px;
 }
 </style>
