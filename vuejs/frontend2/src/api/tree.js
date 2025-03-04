@@ -5,8 +5,8 @@ export const getAllTree = () => {
   return axios.get("/tree/");
 };
 
-export const getTree = (id) => {
-  return axios.get(`/tree/${id}/`);
+export const getTreeStructure = (id) => {
+  return axios.get(`/tree/${id}/get_root/`);
 };
 
 export const createTree = (data) => {
@@ -20,3 +20,4 @@ export const updateTree = (id, data) => {
 export const deleteTree = (id) => {
   return axios.delete(`/tree/${id}/`);
 };
+

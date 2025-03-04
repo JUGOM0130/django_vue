@@ -1,5 +1,5 @@
 <script setup>
-import { getTree } from '@/api/tree';
+import { getTreeStructure } from '@/api/tree';
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue';
 import { useRoute } from 'vue-router';
 import NodeListLightVersion from '../nodes/NodeListLightVersion.vue';
@@ -7,8 +7,8 @@ import NodeListLightVersion from '../nodes/NodeListLightVersion.vue';
 
 const router = useRoute();
 const errorMessage = ref('');
-const id = ref('');//treeのID
-const name = ref('');//treeのName
+const id = ref('');//RootTreeのID
+const name = ref('');//RootTreeのName
 const receiveData = ref({ id: '', name: '' });
 const treeStructure = ref([
   {
@@ -58,6 +58,7 @@ const showContextMenu = (event, item) => {
   // 右クリックされた要素を保存
   selectedItem.value = item;
 
+  console.log(item)
   // メニュー以外をクリックした時にメニューを閉じる
   document.addEventListener('click', closeMenu)
 }
@@ -92,7 +93,7 @@ const log = () => {
 
 const fetchTrees = async (treeId) => {
   try {
-    const response = await getTree(treeId);
+    const response = await getTreeStructure(treeId);
     const data = response.data;
     name.value = data.name;
 
@@ -146,11 +147,6 @@ const fetchTrees = async (treeId) => {
 };
 
 
-/**
- * 子コンポーネントからデータを受け取る
- * @param {Object} node 
- */
-// 新しいノードを追加する処理
 const handleNode = (node) => {
   if (selectedItem.value) {
     // 新しいノードのデータを作成
@@ -158,53 +154,68 @@ const handleNode = (node) => {
       id: node.id,
       name: node.name,
       parent: selectedItem.value.id,
-      child: '',  // 新規ノードは子を持たない
+      child: '',
       tree: id.value,
       level: Number(selectedItem.value.level) + 1
     };
 
-    // 既存の親ノードを更新
-    const parentIndex = treeStructure.value.findIndex(n => n.id === selectedItem.value.id);
+    // 親ノードのインデックスを取得
+    const parentIndex = treeStructure.value.findIndex(
+      n => n.id === selectedItem.value.id
+    );
+
     if (parentIndex !== -1) {
-      // 親ノードの子を設定
+      // 親ノードを更新
       treeStructure.value[parentIndex] = {
         ...treeStructure.value[parentIndex],
         child: node.id
       };
-    }
 
-    // 新しいノードを追加
-    treeStructure.value = [
-      ...treeStructure.value.slice(0, parentIndex + 1),
-      newNode,
-      ...treeStructure.value.slice(parentIndex + 1)
-    ];
+      // 新しい配列を構築
+      const newStructure = [];
+
+      // 現在の配列をイテレートして新しい構造を作成
+      treeStructure.value.forEach((item, index) => {
+        // 親ノードまでは通常通り追加
+        if (index <= parentIndex) {
+          newStructure.push(item);
+        }
+        // 親ノードの直後に新しいノードを追加
+        if (index === parentIndex) {
+          newStructure.push(newNode);
+        }
+        // 親ノード以降の既存のノードを追加
+        if (index > parentIndex) {
+          newStructure.push(item);
+        }
+      });
+
+      treeStructure.value = newStructure;
+    }
   }
 
-  // モーダルとメニューを閉じる
   isModalOpen.value = false;
   isShowMenu.value = false;
 };
 
-// ツリー表示のための計算プロパティを修正
-const organizedTree = computed(() => {
-  return [...treeStructure.value].sort((a, b) => {
-    // まずレベルで比較
-    if (a.level !== b.level) {
-      return a.level - b.level;
-    }
-    // 同じレベルの場合は親ノードで比較
-    if (a.parent !== b.parent) {
-      return treeStructure.value.findIndex(n => n.id === a.parent)
-        - treeStructure.value.findIndex(n => n.id === b.parent);
-    }
-    // それも同じ場合はIDで比較
-    return treeStructure.value.findIndex(n => n.id === a.id)
-      - treeStructure.value.findIndex(n => n.id === b.id);
+// 指定されたノードの子ノードとその子孫を取得する関数
+const getChildrenAndDescendants = (parentId) => {
+  const result = [];
+  const children = treeStructure.value.filter(n => n.parent === parentId);
+
+  children.forEach(child => {
+    result.push(child);
+    const descendants = getChildrenAndDescendants(child.id);
+    result.push(...descendants);
   });
+
+  return result;
+};
+
+// ツリー表示のための計算プロパティ
+const organizedTree = computed(() => {
+  return treeStructure.value;
 });
-
-
 
 
 
@@ -242,6 +253,7 @@ onMounted(async () => {
  */
 onUnmounted(() => {
   document.removeEventListener('click', closeMenu)
+  console.log(treeStructure.value)
 });
 </script>
 
@@ -267,7 +279,7 @@ onUnmounted(() => {
     </div>
 
     <!--登録するデータを視覚化-->
-    <v-data-table :items="treeStructure" density="compact" v-show="false"></v-data-table>
+    <v-data-table :items="treeStructure" density="compact" v-if="false"></v-data-table>
 
 
     <!-- コンテキストメニュー(右クリックメニュー) -->
