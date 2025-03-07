@@ -26,6 +26,51 @@ class TreeStructureViewSet(viewsets.ModelViewSet):
     queryset = TreeStructure.objects.all()
     serializer_class = TreeStructureSerializer
 
+    @action(detail=False, methods=['post'])
+    def bulk_create(self, request):
+        """
+        複数のツリー構造を一括で作成するカスタムアクション
+
+        POST /api/tree-structure/bulk_create/
+        """
+        data = request.data
+        logger.debug(data)
+        if not isinstance(data, list):
+            return Response({"error": "Expected a list of items"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # データの検証
+        for item in data:
+            if 'parent' not in item or 'child' not in item:
+                return Response({"error": "Each item must contain 'parent' and 'child' fields"}, status=status.HTTP_400_BAD_REQUEST)
+            # parentとchildがNULLを許容するように変更
+            if item['parent'] is None and item['child'] is None:
+                return Response({"error": "'parent' and 'child' fields cannot both be null"}, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = self.get_serializer(data=data, many=True)
+        if serializer.is_valid():
+            self.perform_bulk_create(serializer)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        else:
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def perform_bulk_create(self, serializer):
+        """
+        一括作成を実行するメソッド
+        """
+        with transaction.atomic():
+            serializer.save()
+    
+    @action(detail=True, methods=['get'])
+    def get_tree_structure(self, request, pk=None):
+        """
+        特定のツリーIDに関連するツリー構造を取得するカスタムアクション
+
+        GET /api/tree-structure/{id}/get_tree_structure/
+        """
+        tree_id = pk
+        tree_structures = TreeStructure.objects.filter(tree_id=tree_id)
+        serializer = self.get_serializer(tree_structures, many=True)
+        return Response(serializer.data)
 class TreeVersionViewSet(viewsets.ModelViewSet):
     """ツリーバージョンの作成・読取・更新・削除を行うViewSet"""
     queryset = TreeVersion.objects.all()

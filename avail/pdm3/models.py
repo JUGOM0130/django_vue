@@ -50,8 +50,8 @@ class Tree(models.Model):
 
 class TreeStructure(models.Model):
     """親子関係を管理する中間モデル。特定のツリー内での親子関係を表す"""
-    parent = models.ForeignKey(Node, on_delete=models.CASCADE, related_name='children')
-    child = models.ForeignKey(Node, on_delete=models.CASCADE, related_name='parents')
+    parent = models.ForeignKey(Node, null=True, blank=True, on_delete=models.CASCADE, related_name='children')
+    child = models.ForeignKey(Node, null=True, blank=True, on_delete=models.CASCADE, related_name='parents')
     tree = models.ForeignKey(Tree, on_delete=models.CASCADE, related_name='relationships')
     level = models.IntegerField()  # 階層レベル
     create_at = models.DateTimeField(auto_now_add=True, verbose_name="作成日時")
