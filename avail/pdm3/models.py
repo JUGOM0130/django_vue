@@ -34,17 +34,18 @@ class Tree(models.Model):
             if is_new:
                 # ルートノードを作成
                 root_node = Node.objects.create(
-                    name=f"Root_{self.name}",
+                    name=f"{self.name}",
                     description=f"Root node for tree: {self.name}"
                 )
-                
                 # TreeStructureも作成（必須）
                 TreeStructure.objects.create(
                     tree=self,
-                    parent=root_node,
+                    parent=None,  # ルートノードの親はNULL
                     child=root_node,  # ルートノードは自分が親でも子でも同じ
                     level=0
                 )
+
+        
     def __str__(self):
         return f"{self.name}, Version: {self.version}"
 

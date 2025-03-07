@@ -138,10 +138,10 @@ class TreeViewSet(viewsets.ModelViewSet):
         description = request.data.get('description', '')
 
         try:
-            parent_node = Node.objects.get(id=parent_id)
+            parent_node = Node.objects.get(id=parent_id) if parent_id else None
             
-            # 親ノードがこのツリーに属しているか確認
-            if not TreeStructure.objects.filter(
+            # 親ノードが指定されている場合、そのノードがこのツリーに属しているか確認
+            if parent_node and not TreeStructure.objects.filter(
                 tree=tree,
                 child=parent_node
             ).exists():
@@ -158,7 +158,7 @@ class TreeViewSet(viewsets.ModelViewSet):
                 )
 
                 # 親ノードのレベルを取得して新しいノードを関連付け
-                parent_level = TreeStructure.objects.get(
+                parent_level = 0 if parent_node is None else TreeStructure.objects.get(
                     tree=tree,
                     child=parent_node
                 ).level
@@ -179,8 +179,7 @@ class TreeViewSet(viewsets.ModelViewSet):
             return Response(
                 {"error": "Parent node not found"},
                 status=status.HTTP_404_NOT_FOUND
-            )
-        
+            )     
 
 # 特殊な機能を提供する APIView クラス群
 class CodeGenerationView(APIView):
