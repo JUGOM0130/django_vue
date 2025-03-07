@@ -186,8 +186,8 @@ class CodeGenerationView(APIView):
                 node_id=node.id
             )
             
-            # 6. 生成されたコードを含むレスポンスを返す
-            return Response({"code": code}, status=status.HTTP_201_CREATED)
+            # 6. 生成されたコードとIDを含むレスポンスを返す
+            return Response({"code": code, "id": code_version.id}, status=status.HTTP_201_CREATED)
             
         except Prefix.DoesNotExist:
             # プレフィックスが存在しない場合のエラーハンドリング

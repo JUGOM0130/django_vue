@@ -1,9 +1,10 @@
 <script setup>
 import { getTreeStructure } from '@/api/tree';
+import { generateCode } from '@/api/common';
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue';
 import { useRoute } from 'vue-router';
 import NodeListLightVersion from '../nodes/NodeListLightVersion.vue';
-
+import PrefixListLightVersion from '../prefix/PrefixListLightVersion.vue'
 
 const router = useRoute();
 const errorMessage = ref('');
@@ -31,7 +32,8 @@ const menuPosition = ref({
 /**
  *  モーダルの表示制御用
  */
-const isModalOpen = ref(false);
+const isModalOpen_nodeList = ref(false);
+const isModalOpen_prefixList = ref(false);
 /**
  * 右クリックされた要素を保存するための変数を追加
  */
@@ -71,12 +73,12 @@ const closeMenu = () => {
 
 // メニューアクション
 const openRegistedNodeListView = () => {
-  isModalOpen.value = true; // モーダルを表示
+  isModalOpen_nodeList.value = true; // モーダルを表示
   closeMenu()
 }
 
-const menuAction2 = () => {
-  console.log('メニュー2がクリックされました')
+const openPrefixListView = () => {
+  isModalOpen_prefixList.value = true;
   closeMenu()
 }
 
@@ -88,6 +90,7 @@ const menuAction3 = () => {
 const log = () => {
   console.log(treeStructure.value);
 }
+
 
 
 
@@ -147,12 +150,19 @@ const fetchTrees = async (treeId) => {
 };
 
 
-const handleNode = (node) => {
+
+
+/**
+ * ツリーに新しいノードを追加する
+ * @param {string} id - 新しいノードのID
+ * @param {string} name - 新しいノードの名前
+ */
+const addNodeToTree = (id, name) => {
   if (selectedItem.value) {
     // 新しいノードのデータを作成
     const newNode = {
-      id: node.id,
-      name: node.name,
+      id: id,
+      name: name,
       parent: selectedItem.value.id,
       child: '',
       tree: id.value,
@@ -168,7 +178,7 @@ const handleNode = (node) => {
       // 親ノードを更新
       treeStructure.value[parentIndex] = {
         ...treeStructure.value[parentIndex],
-        child: node.id
+        child: id
       };
 
       // 新しい配列を構築
@@ -194,9 +204,36 @@ const handleNode = (node) => {
     }
   }
 
-  isModalOpen.value = false;
+  isModalOpen_nodeList.value = false;
+  isModalOpen_prefixList.value = false;
   isShowMenu.value = false;
 };
+
+/**
+ * ノードをツリーに追加する
+ * @param {Object} node - 追加するノードのデータ
+ * @param {string} node.id - ノードのID
+ * @param {string} node.name - ノードの名前
+ */
+const handleNode = (node) => {
+  addNodeToTree(node.id, node.name);
+};
+
+/**
+ * プレフィックスをツリーに追加する
+ * @param {Object} prefix - 追加するプレフィックスのデータ
+ * @param {string} prefix.id - プレフィックスのID
+ * @param {string} prefix.name - プレフィックスの名前
+ */
+const handlePrefix = async(prefix) => {
+  const result = await generateCode(prefix.id)
+  const data = result.data
+
+  addNodeToTree(data.id, data.code);
+
+};
+
+
 
 // 指定されたノードの子ノードとその子孫を取得する関数
 const getChildrenAndDescendants = (parentId) => {
@@ -285,18 +322,17 @@ onUnmounted(() => {
     <!-- コンテキストメニュー(右クリックメニュー) -->
     <div v-if="isShowMenu" :style="menuPosition" class="context-menu">
       <ul>
+        <li @click="openPrefixListView">コード発番</li>
         <li @click="openRegistedNodeListView">登録済みノード一覧</li>
-        <li @click="menuAction2">メニュー2</li>
-        <li @click="menuAction3">メニュー3</li>
       </ul>
     </div>
 
-    <!-- モーダル -->
-    <v-dialog v-model="isModalOpen" width="auto">
+    <!-- モーダル NodeList -->
+    <v-dialog v-model="isModalOpen_nodeList" width="auto">
       <v-card>
         <v-card-title>
           Node List
-          <v-btn icon="mdi-close" @click="isModalOpen = false" class="float-right"></v-btn>
+          <v-btn icon="mdi-close" @click="isModalOpen_nodeList = false" class="float-right"></v-btn>
         </v-card-title>
         <v-card-text>
           <!-- ノード一覧 -->
@@ -305,6 +341,26 @@ onUnmounted(() => {
         </v-card-text>
       </v-card>
     </v-dialog>
+
+  <!-- モーダル PrefixList -->
+  <v-dialog v-model="isModalOpen_prefixList" width="auto">
+    <v-card>
+      <v-card-title>
+        Prefix List
+        <v-btn 
+          icon="mdi-close" 
+          @click="isModalOpen_prefixList = false" 
+          class="float-right"
+        ></v-btn>
+      </v-card-title>
+      <v-card-text>
+        <!-- プレフィックス一覧 -->
+        <!-- @data-sentが子コンポーネントから発火されるとhandlePrefixイベントが発火する -->
+        <PrefixListLightVersion @data-sent="handlePrefix" />
+      </v-card-text>
+    </v-card>
+  </v-dialog>
+
   </v-container>
 </template>
 
