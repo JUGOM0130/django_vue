@@ -29,7 +29,7 @@ class TreeStructureViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['post'])
     def bulk_create(self, request):
         """
-        複数のツリー構造を一括で作成するカスタムアクション
+        複数のツリー構造を一括で作成または更新するカスタムアクション
 
         POST /api/tree-structure/bulk_create/
         """
@@ -46,12 +46,28 @@ class TreeStructureViewSet(viewsets.ModelViewSet):
             if item['parent'] is None and item['child'] is None:
                 return Response({"error": "'parent' and 'child' fields cannot both be null"}, status=status.HTTP_400_BAD_REQUEST)
 
-        serializer = self.get_serializer(data=data, many=True)
-        if serializer.is_valid():
-            self.perform_bulk_create(serializer)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        else:
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        # データの処理
+        for item in data:
+            if 'id' in item and item['id']:
+                # IDが存在する場合は更新
+                try:
+                    tree_structure = TreeStructure.objects.get(id=item['id'])
+                    serializer = self.get_serializer(tree_structure, data=item)
+                    if serializer.is_valid():
+                        serializer.save()
+                    else:
+                        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                except TreeStructure.DoesNotExist:
+                    return Response({"error": f"TreeStructure with id {item['id']} does not exist"}, status=status.HTTP_404_NOT_FOUND)
+            else:
+                # IDが存在しない場合は新規作成
+                serializer = self.get_serializer(data=item)
+                if serializer.is_valid():
+                    serializer.save()
+                else:
+                    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response({"status": "success"}, status=status.HTTP_201_CREATED)
 
     def perform_bulk_create(self, serializer):
         """
@@ -59,7 +75,8 @@ class TreeStructureViewSet(viewsets.ModelViewSet):
         """
         with transaction.atomic():
             serializer.save()
-    
+
+
     @action(detail=True, methods=['get'])
     def get_tree_structure(self, request, pk=None):
         """
@@ -71,6 +88,12 @@ class TreeStructureViewSet(viewsets.ModelViewSet):
         tree_structures = TreeStructure.objects.filter(tree_id=tree_id)
         serializer = self.get_serializer(tree_structures, many=True)
         return Response(serializer.data)
+    
+
+
+
+
+    
 class TreeVersionViewSet(viewsets.ModelViewSet):
     """ツリーバージョンの作成・読取・更新・削除を行うViewSet"""
     queryset = TreeVersion.objects.all()

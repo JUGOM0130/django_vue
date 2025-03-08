@@ -59,7 +59,10 @@ class TreeStructure(models.Model):
     update_at = models.DateTimeField(auto_now=True, verbose_name="更新日時")
 
     def __str__(self):
-        return f"{self.parent.name} -> {self.child.name} in {self.tree.name} (Level: {self.level})"
+        parent_name = self.parent.name if self.parent else "No Parent"
+        child_name = self.child.name if self.child else "No Child"
+        tree_name = self.tree.name if self.tree else "No Tree"
+        return f"{parent_name} -> {child_name} in {tree_name} (Level: {self.level})"
 
     class Meta:
         unique_together = ('parent', 'child', 'tree')
