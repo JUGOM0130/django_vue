@@ -34,7 +34,6 @@ class TreeStructureViewSet(viewsets.ModelViewSet):
         POST /api/tree-structure/bulk_create/
         """
         data = request.data
-        logger.debug(data)
         if not isinstance(data, list):
             return Response({"error": "Expected a list of items"}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -89,11 +88,84 @@ class TreeStructureViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(tree_structures, many=True)
         return Response(serializer.data)
     
+    @action(detail=False, methods=['get'])
+    def get_root_structure_detail(self, request):
+        try:
+            node_id = request.query_params.get('node_id')
+            
+            if not node_id:
+                return Response(
+                    {"error": "node_id parameter is required"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # 条件に合致するTreeStructureを配列として取得
+            root_structures = TreeStructure.objects.filter(
+                child_id=node_id,
+                parent__isnull=True
+            ).select_related('child', 'tree')
+
+            # レスポンスデータの作成
+            response_data = {
+                'tree_structures': [],
+                'node': None,
+                'trees': [],
+                'children_count': TreeStructure.objects.filter(
+                    parent_id=node_id
+                ).count()
+            }
+
+            if root_structures.exists():
+                first_structure = root_structures.first()
+                response_data['node'] = {
+                    'id': first_structure.child.id,
+                    'name': first_structure.child.name,
+                    'description': first_structure.child.description
+                }
+
+                # 関連するツリーIDを取得
+                tree_ids = root_structures.values_list('tree_id', flat=True)
+
+                # 同じツリーに属する全TreeStructureを取得（Nodeの情報も含める）
+                all_tree_structures = (TreeStructure.objects
+                    .filter(tree_id__in=tree_ids)
+                    .select_related('child', 'tree', 'parent'))
+
+                # TreeStructureとノード情報をまとめて取得
+                nodes_dict = {
+                    ts.child.id: ts.child.name 
+                    for ts in all_tree_structures
+                }
+
+                # 全TreeStructureの情報を追加
+                for structure in all_tree_structures:
+                    structure_data = {
+                        'id': structure.id,
+                        'child': structure.child.id,
+                        'parent': structure.parent_id,
+                        'tree': structure.tree.id,
+                        'level': structure.level,
+                        'name': nodes_dict.get(structure.child.id, '')  # 対応するNode名を設定
+                    }
+                    response_data['tree_structures'].append(structure_data)
+
+                # Tree情報を追加
+                trees = Tree.objects.filter(id__in=tree_ids)
+                for tree in trees:
+                    response_data['trees'].append({
+                        'id': tree.id,
+                        'name': tree.name
+                    })
+
+            return Response(response_data)
+
+        except Exception as e:
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
 
-
-
-    
 class TreeVersionViewSet(viewsets.ModelViewSet):
     """ツリーバージョンの作成・読取・更新・削除を行うViewSet"""
     queryset = TreeVersion.objects.all()
