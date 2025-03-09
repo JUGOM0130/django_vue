@@ -1,5 +1,5 @@
 // src/router/index.js
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHashHistory } from 'vue-router'
 
 // ルート設定
 const routes = [
@@ -22,7 +22,7 @@ const routes = [
 ]
 
 const router = createRouter({
-  history: createWebHistory('/src/pages/trees'),
+  history: createWebHashHistory('/src/pages/trees'),
   routes: routes
 })
 

@@ -45,3 +45,30 @@ export const getTreeStructure = (tree_id) =>{
   return axios.get(`tree-structure/${id}/get_tree_structure/`);
 };
 
+/**
+ * 指定されたNodeIDをchildに持ち、parentがNullであるTreeStructureの詳細情報を取得する
+ * 
+ * @param {number} node_id - 検索対象のNodeID
+ * @returns {Promise<{
+*   tree_structures: Array<{
+*     id: number,
+*     child: number,
+*     parent: null,
+*     tree: number,
+*     level: number
+*   }>,
+*   node: {
+*     id: number,
+*     name: string,
+*     description: string
+*   },
+*   trees: Array<{
+*     id: number,
+*     name: string
+*   }>,
+*   children_count: number
+* }>} TreeStructureの配列と関連する詳細情報
+*/
+export const get_root_structure_detail = (node_id) => {
+ return axios.get(`tree-structure/get_root_structure_detail/?node_id=${node_id}`)
+}
