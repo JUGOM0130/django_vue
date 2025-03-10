@@ -1,15 +1,7 @@
 from django.db import models, transaction
 from django.utils import timezone
 
-class Node(models.Model):
-    """個々のノードを表すモデル。ツリー内のすべてのノードが格納される"""
-    name = models.CharField(max_length=100)
-    description = models.TextField(blank=True, null=True)
-    create_at = models.DateTimeField(auto_now_add=True, verbose_name="作成日時")
-    update_at = models.DateTimeField(auto_now=True, verbose_name="更新日時")
 
-    def __str__(self):
-        return self.name
 
 class Tree(models.Model):
     """ツリー自体を表すモデル。使い回される"""
@@ -121,6 +113,18 @@ class Prefix(models.Model):
     def __str__(self):
         return self.name
 
+
+
+class Node(models.Model):
+    """個々のノードを表すモデル。ツリー内のすべてのノードが格納される"""
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True, null=True)
+    create_at = models.DateTimeField(auto_now_add=True, verbose_name="作成日時")
+    update_at = models.DateTimeField(auto_now=True, verbose_name="更新日時")
+
+    def __str__(self):
+        return self.name
+    
 class CodeCounter(models.Model):
     """プレフィックスごとのカウンターと版数を管理するモデル"""
     prefix = models.ForeignKey(Prefix, on_delete=models.CASCADE, related_name="counters")
