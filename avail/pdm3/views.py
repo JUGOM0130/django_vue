@@ -79,9 +79,9 @@ class TreeStructureViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get'])
     def get_tree_structure(self, request, pk=None):
         """
-        特定のツリーIDに関連するツリー構造を取得するカスタムアクション
+        特定のツリーIDに関連するツリー構造を取得するカスタムアクション 
 
-        GET /api/tree-structure/{id}/get_tree_structure/
+        GET /api3/tree-structure/{id}/get_tree_structure/
         """
         tree_id = pk
         tree_structures = TreeStructure.objects.filter(tree_id=tree_id)
@@ -90,6 +90,11 @@ class TreeStructureViewSet(viewsets.ModelViewSet):
     
     @action(detail=False, methods=['get'])
     def get_root_structure_detail(self, request):
+        """
+        ノードの流用に使う
+
+        GET /api3/get_root_structure_detail/?node_id=${id}
+        """
         try:
             node_id = request.query_params.get('node_id')
             
@@ -175,6 +180,45 @@ class PrefixViewSet(viewsets.ModelViewSet):
     """プレフィックスの作成・読取・更新・削除を行うViewSet"""
     queryset = Prefix.objects.all()
     serializer_class = PrefixSerializer
+
+    @action(detail=True, methods=['post'])
+    def generate_code(self, request, pk=None):
+        """
+        指定されたプレフィックスに基づいてコードを生成するアクション
+        
+        URL: /api3/prefixes/{prefix_id}/generate_code/
+        Method: POST
+        """
+        try:
+            prefix = self.get_object()  # URLのpkからPrefixオブジェクトを取得
+            
+            # コードの生成
+            code = generate_code(prefix)
+            
+            # 関連モデルの作成
+            code_version = CodeVersion.objects.create(code=code, version=0)
+            node = Node.objects.create(name=code, description="")
+            CodeVersionHistory.objects.create(
+                code=code,
+                version=0,
+                node_id=node.id
+            )
+            
+            return Response({
+                "code": code,
+                "id": node.id
+            }, status=status.HTTP_201_CREATED)
+            
+        except Prefix.DoesNotExist:
+            return Response(
+                {"error": "Prefix not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except ValueError as e:
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
 # 通常のViewSetにカスタムを加えたもの
 class TreeViewSet(viewsets.ModelViewSet):
@@ -276,7 +320,11 @@ class TreeViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND
             )     
 
+
+
+
 # 特殊な機能を提供する APIView クラス群
+# これはカスタムアクションとしてPrefixの中に入れたのでもう使わない
 class CodeGenerationView(APIView):
     """
     コード生成を行うAPIView
@@ -340,6 +388,10 @@ class CodeGenerationView(APIView):
                 {"error": str(e)},
                 status=status.HTTP_400_BAD_REQUEST
             )
+        
+
+
+
 class CodeUpdateView(APIView):
     """
     既存コードのバージョンを更新するAPIView
