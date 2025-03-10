@@ -29,17 +29,24 @@ export const createPrefix = (data) => {
  * @returns {Promise<Object>} 更新されたプレフィックスのデータを含むPromise
  */
 export const updatePrefix = (id, data) => {
-    return axios.put(`/prefix/${id}/`, {
-      name: data.name,
-      description: data.description,
-      code_type: data.code_type
-    });
-  };
+  return axios.put(`/prefix/${id}/`, {
+    name: data.name,
+    description: data.description,
+    code_type: data.code_type
+  });
+};
 
 // プレフィックスを削除
 export const deletePrefix = (id) => {
   return axios.delete(`/prefix/${id}/`);
 };
+
+
+// プレフィックスを削除
+export const generateCode = (prefix_id) => {
+  return axios.post(`prefix/${prefix_id}/generate_code/`);
+};
+
 
 // コードタイプの選択肢を取得するための定数
 export const CODE_TYPE_CHOICES = [

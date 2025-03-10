@@ -15,7 +15,8 @@ const {
   menuPosition,
   isMenuVisible,
   selectedNode,
-  initialize
+  initialize,
+  bulkCreateTree
 } = useTreeView()
 
 onMounted(async () => {
@@ -61,7 +62,7 @@ const handleGlobalClick = (event) => {
 
       <v-row>
         <v-col>
-          <v-btn variant="outlined" color="primary" class="mb-5">登録</v-btn>
+          <v-btn variant="outlined" color="primary" class="mb-5" @click="bulkCreateTree">登録</v-btn>
         </v-col>
         <v-col>
           <!-- 右クリックした際のオブジェクトの値 -->

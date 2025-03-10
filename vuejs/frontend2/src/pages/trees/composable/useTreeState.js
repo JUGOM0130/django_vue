@@ -22,7 +22,7 @@ const initialState = {
   },
   isLoading: false,
   errorMessage: '',
-  isTest: true,
+  isTest: false,
   isInitialized: false
 }
 

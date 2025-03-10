@@ -4,7 +4,8 @@ import { useRoute } from 'vue-router'
 import { useTreeState } from './useTreeState'
 import { useTreeData } from './useTreeData'
 import { useContextMenu } from './useContextMenu'
-import { generateCode } from '@/api/common'
+import { generateCode } from '@/api/prefix'
+import { bulkCreateTreeStructure } from '@/api/tree'
 
 
 export const useTreeView = () => {
@@ -440,6 +441,16 @@ export const useTreeView = () => {
     }
 
 
+    const bulkCreateTree = async () => {
+        const response = await bulkCreateTreeStructure(treeData.value.structure);
+        const { data } = response;
+
+        console.log(data)
+
+        window.location.reload()
+    }
+
+
 
     return {
         state,
@@ -454,6 +465,7 @@ export const useTreeView = () => {
         selectedNode,
         initialize,
         createRegularNode,
-        createPrefixNode
+        createPrefixNode,
+        bulkCreateTree
     }
 }
