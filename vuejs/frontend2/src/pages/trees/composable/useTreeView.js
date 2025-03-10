@@ -5,7 +5,7 @@ import { useTreeState } from './useTreeState'
 import { useTreeData } from './useTreeData'
 import { useContextMenu } from './useContextMenu'
 import { generateCode } from '@/api/prefix'
-import { bulkCreateTreeStructure } from '@/api/tree'
+import { bulkCreateTreeStructure, get_root_structure_detail } from '@/api/tree'
 
 
 export const useTreeView = () => {
@@ -58,6 +58,19 @@ export const useTreeView = () => {
         hide: hideContextMenu     // コンテキストメニューを非表示
     }
 
+
+
+
+    /**
+     * 以下、処理を記載
+     * 
+     * 
+     * 
+     * 
+     * 
+     * 
+     * 
+     */
 
     /**
      * ツリー構造のデータを整理してソートするメソッド
@@ -125,7 +138,6 @@ export const useTreeView = () => {
     };
 
 
-
     /**
      * ツリー構造を整理・ソートして返すcomputedプロパティ
      * @returns {Array} ソート済みのツリー構造の配列
@@ -158,36 +170,6 @@ export const useTreeView = () => {
      * @throws {Error} ノード追加時にエラーが発生した場合
      */
     const addNodeToStructure = async (data, selectedInfo, type = 'node') => {
-        // 循環参照をチェックする関数
-        const isCircular = (parent, childId) => {
-            if (parent.id === childId) return true;
-            if (parent.children) {
-                return parent.children.some(child => isCircular(child, childId));
-            }
-            return false;
-        };
-
-        const addNode = (current) => {
-            if (current.id === parentId) {
-                // 追加前に循環参照をチェック
-                if (isCircular(newNode, current.id)) {
-                    console.warn('循環参照の作成が試みられました');
-                    return false;
-                }
-
-                current.children = current.children || [];
-                current.children.push(newNode);
-                return true;
-            }
-
-            if (current.children) {
-                for (const child of current.children) {
-                    if (addNode(child)) return true;
-                }
-            }
-            return false;
-        };
-
         const currentTreeId = state.treeId
         if (!currentTreeId || !data || !selectedInfo) {
             console.error('Missing required data for node addition')
@@ -198,66 +180,38 @@ export const useTreeView = () => {
             // 新しいノードのデータを準備
             let nodeData = type === 'prefix'
                 ? await createPrefixNode(data, currentTreeId)
-                : createRegularNode(data, currentTreeId)//これなんだ・・・
+                : createRegularNode(data, currentTreeId)
 
-            // log
+            // 下位構造を取得
+            let childrenStructures = []
+            if (type === 'node' && nodeData.id) {
+                try {
+                    const response = await get_root_structure_detail(nodeData.id)
+                    if (response.data && response.data.tree_structures) {
+                        childrenStructures = response.data.tree_structures
+                    }
+                } catch (error) {
+                    console.warn('下位構造の取得に失敗しました:', error)
+                }
+            }
+
+            // 下位構造のレベルを調整
+            const adjustedChildStructures = childrenStructures.map(structure => ({
+                ...structure,
+                level: structure.level + selectedInfo.level + 1,
+                tree: currentTreeId,
+                id: ''
+            }))
+
+            // 既存の配列に調整済みの下位構造を追加
+            treeData.value.structure = [
+                ...treeData.value.structure,
+                ...adjustedChildStructures
+            ]
+
             if (state.isTest) {
-                console.log("useTreeView.addNodeToStructure.nodeData", nodeData)
-                console.log("useTreeView.addNodeToStructure child", nodeData.id)
-                console.log("useTreeView.addNodeToStructure parent", selectedInfo.child)
-                console.log("useTreeView.addNodeToStructure level", selectedInfo.level + 1)
-                console.log("useTreeView.addNodeToStructure name", nodeData.name)
+                console.log("Updated tree structure:", treeData.value.structure)
             }
-
-            // ツリー構造用のノードデータを作成
-            const newNode = {
-                ...nodeData,
-                id: '',  //新しいNodeはDBに登録されていないのでIDは付与されない
-                name: nodeData.name,
-                parent: selectedInfo.child,  // 変更: child → id
-                child: nodeData.id,
-                level: selectedInfo.level + 1,
-                tree: currentTreeId
-            }
-
-            // log
-            if (state.isTest) { console.log("useTreeView.addNodeToStructure.newNode", newNode) }
-
-
-            /*
-            // 既存の親ノードを更新（selectedNodeInfoを使用）
-            const parentNode = treeData.value.structure.find(node =>
-                node.parent === selectedInfo.parent &&
-                node.level === selectedInfo.level
-            )
-
-            // log
-            if (state.isTest) { console.log("useTreeView.addNodeToStructure.parentNode", parentNode) }
-
-            if (parentNode) {
-                parentNode.child = newNode.id  // 親ノードの child を新しいノードの id に設定
-            }
-            */
-
-            treeData.value.structure.push({
-                id: newNode.id,
-                name: newNode.name,
-                parent: newNode.parent,
-                child: newNode.child,
-                level: newNode.level,
-                tree: newNode.tree
-            });
-
-            // log
-            if (state.isTest) { console.log("useTreeView.addNodeToStructure.treeData", treeData.value) }
-
-
-            /**
-             * 
-             * 
-             * ここでツリーをソートする処理をする
-             */
-
 
             return true
 

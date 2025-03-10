@@ -106,7 +106,8 @@ const handleGlobalClick = (event) => {
 
 
       <!-- データ構造の可視化 -->
-      <v-data-table :items="organizedTree" density="compact" class="mt-16 pt-16"></v-data-table>
+      <v-data-table :items="organizedTree" density="compact" class="mt-16 pt-16" item-value="uniqueKey">
+      </v-data-table>
 
       <!-- NodeListモーダル -->
       <v-dialog v-model="state.isModalOpen.nodeList" width="auto">
