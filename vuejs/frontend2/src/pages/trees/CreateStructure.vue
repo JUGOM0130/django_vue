@@ -53,9 +53,24 @@ const handleGlobalClick = (event) => {
     <!-- ローディング表示 -->
     <v-progress-circular v-if="!state.isInitialized && state.loading" indeterminate color="primary" />
 
+
     <template v-else>
       <!-- エラーメッセージ -->
       <p v-if="state.errorMessage" class="error-message">{{ state.errorMessage }}</p>
+
+
+      <v-row>
+        <v-col>
+          <v-btn variant="outlined" color="primary" class="mb-5">登録</v-btn>
+        </v-col>
+        <v-col>
+          <!-- 右クリックした際のオブジェクトの値 -->
+          <p v-if="state.isTest" class="">
+            Selected = nodeID:{{ state.selectedNodeInfo.child }}
+            level:{{ state.selectedNodeInfo.level }}
+            parent:{{ state.selectedNodeInfo.parent }}</p>
+        </v-col>
+      </v-row>
 
       <!-- ツリービュー -->
       <div class="tree-view" @click.self="contextMenuOperations.hide">
@@ -86,11 +101,7 @@ const handleGlobalClick = (event) => {
         </ul>
       </div>
 
-      <!-- 右クリックした際のオブジェクトの値 -->
-      <p v-if="state.isTest" class="mt-16">
-        Selected = nodeID:{{ state.selectedNodeInfo.child }}
-        level:{{ state.selectedNodeInfo.level }}
-        parent:{{ state.selectedNodeInfo.parent }}</p>
+
 
 
       <!-- データ構造の可視化 -->

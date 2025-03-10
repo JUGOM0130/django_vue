@@ -8,49 +8,75 @@ import { generateCode } from '@/api/common'
 
 
 export const useTreeView = () => {
+    // ルーターのルート情報を取得
     const route = useRoute()
+
+    // ツリー状態管理用のステートとアクションを取得
     const { state, actions } = useTreeState()
+
+    // ツリーデータ関連の機能をカスタムフックから取得
     const {
-        treeData,
-        fetchTreeData,
-        fetchRootStructureDetail,
-        addNodeToTree,
-        fetchTreeStructure: fetchTree  // 名前を変更して衝突を避ける
+        treeData,                    // ツリーデータ本体
+        fetchTreeData,              // ツリーデータを取得する関数
+        fetchRootStructureDetail,   // ルート構造の詳細を取得する関数
+        addNodeToTree,             // ツリーにノードを追加する関数
+        fetchTreeStructure: fetchTree  // 名前の衝突を避けるため別名で取得
     } = useTreeData()
-    // コンテキストメニューの機能をインポート
+
+    // コンテキストメニュー関連の機能をカスタムフックから取得
     const {
-        menuPosition,
-        isMenuVisible,
-        selectedNode,
-        show: showContextMenu,
-        hide: hideContextMenu,
-        setupClickListener
+        menuPosition,              // メニューの表示位置
+        isMenuVisible,            // メニューの表示/非表示状態
+        selectedNode,             // 選択されたノード
+        show: showContextMenu,    // メニューを表示する関数
+        hide: hideContextMenu,    // メニューを非表示にする関数
+        setupClickListener        // クリックイベントリスナーのセットアップ関数
     } = useContextMenu(actions);
 
-
+    // モーダル操作関連の関数をオブジェクトにまとめる
     const modalOperations = {
-        openNodeList: () => {
+        openNodeList: () => {     // ノードリストモーダルを開く
             actions.setModalState('nodeList', true)
             isMenuVisible.value = false
         },
-        closeNodeList: () => {
+        closeNodeList: () => {    // ノードリストモーダルを閉じる
             actions.setModalState('nodeList', false)
         },
-        openPrefixList: () => {
+        openPrefixList: () => {   // プレフィックスリストモーダルを開く
             actions.setModalState('prefixList', true)
             isMenuVisible.value = false
         },
-        closePrefixList: () => {
+        closePrefixList: () => {  // プレフィックスリストモーダルを閉じる
             actions.setModalState('prefixList', false)
         }
     }
 
-    // contextMenuOperationsをコンテキストメニューの機能で置き換え
+    // コンテキストメニュー操作をシンプルなオブジェクトにまとめる
     const contextMenuOperations = {
-        show: showContextMenu,
-        hide: hideContextMenu
+        show: showContextMenu,    // コンテキストメニューを表示
+        hide: hideContextMenu     // コンテキストメニューを非表示
     }
 
+
+    /**
+     * ツリー構造のデータを整理してソートするメソッド
+     * 
+     * このメソッドは以下の処理を行います：
+     * 1. 親子関係に基づいてノードを整理
+     * 2. 同じレベルのノードをアルファベット順にソート
+     * 3. ツリー構造を保持しながら一次元配列に変換
+     * 
+     * @param {Array} structures - 整理前のツリー構造データ配列
+     *   各要素は以下のプロパティを持つ:
+     *   - id: ノードのID
+     *   - name: ノード名
+     *   - parent: 親ノードのID
+     *   - level: ツリーにおけるレベル
+     *   - child: ノードのID(名前が悪い＝NodeIDが適切な名前)
+     *   - tree: ツリーの識別子
+     * 
+     * @returns {Array} 整理・ソート済みのノード配列
+     */
     const sortTreeStructure = (structures) => {
         if (!structures || structures.length === 0) {
             return [];
@@ -97,13 +123,18 @@ export const useTreeView = () => {
         }));
     };
 
-    // computedプロパティ
+
+
+    /**
+     * ツリー構造を整理・ソートして返すcomputedプロパティ
+     * @returns {Array} ソート済みのツリー構造の配列
+     */
     const organizedTree = computed(() => {
         try {
             const structures = treeData.value.structure;
-            console.log('Input structures:', JSON.stringify(structures));
+            //console.log('Input structures:', JSON.stringify(structures));
             const result = sortTreeStructure(structures);
-            console.log('Organized result:', JSON.stringify(result));
+            //console.log('Organized result:', JSON.stringify(result));
             return result;
         } catch (error) {
             console.error('Error organizing tree structure:', error);
@@ -112,20 +143,18 @@ export const useTreeView = () => {
     });
 
 
-    const updateTreeStructure = async (id) => {
-        try {
-            await fetchTree(id)  // fetchTreeStructure から fetchTree に変更
-        } catch (error) {
-            console.error('Failed to update tree structure:', error)
-            actions.setErrorMessage('ツリー構造の更新に失敗しました。')
-        }
-    }
-
     /**
-     * ノードをツリー構造に追加する
-     * @param {Object} data - ノードデータまたはプレフィックスデータ
-     * @param {Object} selectedInfo - 選択中のノード情報
-     * @param {string} type - 'node'（既存ノード）または'prefix'（新規コード発番）
+     * ツリー構造に新しいノードを追加する処理を行います。
+     * 選択中のノードの子として新規ノードを追加し、循環参照のチェックを行います。
+     * ノードのタイプは既存ノード('node')または新規コード発番('prefix')の2種類から選択できます。
+     * 
+     * @param {Object} data - 追加するノードのデータまたはプレフィックスデータ 
+     * @param {Object} selectedInfo - 選択中の親ノードの情報
+     * @param {string} selectedInfo.child - 選択中ノードのID
+     * @param {number} selectedInfo.level - 選択中ノードのレベル
+     * @param {string} [type='node'] - ノードのタイプ。'node'(既存ノード)または'prefix'(新規コード発番)
+     * @returns {Promise<boolean>} 追加処理の成功/失敗を返す
+     * @throws {Error} ノード追加時にエラーが発生した場合
      */
     const addNodeToStructure = async (data, selectedInfo, type = 'node') => {
         // 循環参照をチェックする関数
@@ -237,7 +266,14 @@ export const useTreeView = () => {
         }
     }
 
-    // 既存ノードを追加するハンドラー
+    /**
+     * 既存ノードをツリー構造に追加するためのハンドラー関数
+     * 選択中のノード配下に既存ノードを追加し、モーダルを閉じます
+     * 
+     * @param {Object} data - 追加する既存ノードのデータ
+     * @returns {Promise<void>} 
+     * @throws {Error} ノードの追加処理に失敗した場合
+     */
     const handleNodeData = async (data) => {
 
         if (!state.selectedNodeInfo) {
@@ -258,7 +294,16 @@ export const useTreeView = () => {
         }
     }
 
-    // プレフィックスからコードを発番して追加するハンドラー
+    /**
+     * プレフィックスから新規コードを発番してツリー構造に追加するハンドラー関数
+     * 選択中のノード配下に新規発番したコードのノードを追加し、モーダルを閉じます
+     * 
+     * @param {Object} data - プレフィックスのデータ
+     * @param {string} data.prefix - プレフィックスコード
+     * @param {string} data.name - プレフィックス名称
+     * @returns {Promise<void>}
+     * @throws {Error} コードの発番・追加処理に失敗した場合
+     */
     const handlePrefixData = async (data) => {
         if (!state.selectedNodeInfo) {
             console.error('No node selected')
@@ -279,6 +324,14 @@ export const useTreeView = () => {
     }
 
 
+    /**
+     * 指定されたノードIDの詳細情報を取得する非同期関数
+     * 取得中はローディング状態を管理し、エラー発生時はエラーメッセージを設定します
+     * 
+     * @param {string} nodeId - 詳細を取得するノードのID
+     * @returns {Promise<Object|undefined>} ノードの詳細情報。エラー時はundefined
+     * @throws {Error} API呼び出しに失敗した場合
+     */
     const getNodeDetail = async (nodeId) => {
         actions.setLoading(true)
         try {
@@ -291,6 +344,20 @@ export const useTreeView = () => {
         }
     }
 
+    /**
+     * ツリービューの初期化を行う非同期関数
+     * URLクエリパラメータからツリーIDを取得し、対応するツリーデータを読み込みます
+     * 初期化状態、ローディング状態、エラー状態を管理します
+     * 
+     * @returns {Promise<void>}
+     * @throws {Error} ツリーIDが不正な場合やデータ取得に失敗した場合
+     * 
+     * 処理フロー:
+     * 1. URLからツリーIDを取得
+     * 2. ツリーIDの存在確認
+     * 3. ツリーデータのフェッチ
+     * 4. ステート更新
+     */
     const initialize = async () => {
         const treeid = route.query.id
         if (!treeid) {
@@ -313,7 +380,21 @@ export const useTreeView = () => {
         }
     }
 
-    // 新規コード発番用の関数
+    /**
+     * プレフィックスから新規コードを発番してノードデータを生成する非同期関数
+     * APIを使用して新しいコードを生成し、ツリーノード用のデータ構造に変換します
+     * 
+     * @param {Object} prefix - プレフィックスデータ
+     * @param {string} prefix.id - プレフィックスのID
+     * @param {string} prefix.name - プレフィックスの名称
+     * @param {string} treeId - ツリーのID
+     * @returns {Promise<Object>} 生成されたノードデータ
+     * @returns {string} returns.id - 生成されたコードID
+     * @returns {string} returns.name - 生成されたコード名
+     * @returns {string} returns.prefix - プレフィックス名
+     * @returns {string} returns.tree - ツリーID
+     * @throws {Error} コード生成APIの呼び出しに失敗した場合
+     */
     const createPrefixNode = async (prefix, treeId) => {
 
         try {
@@ -334,7 +415,21 @@ export const useTreeView = () => {
         }
     }
 
-    // 既存ノード用の関数
+    /**
+     * 既存ノードデータからツリー用のノードデータを生成する関数
+     * 既存ノードの情報を保持しながら、ツリー用のデータ構造に変換します
+     * 
+     * @param {Object} node - 既存ノードのデータ
+     * @param {string} node.id - ノードのID
+     * @param {string} node.name - ノードの名称
+     * @param {string} node.code - ノードのコード
+     * @param {string} treeId - ツリーのID
+     * @returns {Object} ツリー用のノードデータ
+     * @returns {string} returns.id - ノードID
+     * @returns {string} returns.name - ノード名称
+     * @returns {string} returns.code - ノードコード
+     * @returns {string} returns.tree - ツリーID
+     */
     const createRegularNode = (node, treeId) => {
         return {
             id: node.id,
