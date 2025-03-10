@@ -39,7 +39,56 @@ class PrefixAdmin(admin.ModelAdmin):
     # 1ページあたりの表示件数
     list_per_page = 50
 
+# TreeStructureモデル用のカスタムAdminクラス
+@admin.register(TreeStructure)
+class TreeStructureAdmin(admin.ModelAdmin):
+    # リスト表示画面でのカラム指定
+    list_display = ('id', 'parent','tree','level',)
+    
+    # idをクリックして編集画面に遷移できるように設定
+    list_display_links = ('id','parent')
+
+    # 検索対象のフィールド
+    search_fields = ['tree__name']
+
+    # 1ページあたりの表示件数
+    list_per_page = 50
+
+# Treeモデル用のカスタムAdminクラス
+@admin.register(Tree)
+class TreeAdmin(admin.ModelAdmin):
+    # リスト表示画面でのカラム指定
+    list_display = ('id', 'name',)
+    
+    # idをクリックして編集画面に遷移できるように設定
+    list_display_links = ('id','name')
+
+    # 検索対象のフィールド
+    search_fields = ['name']
+
+    # 1ページあたりの表示件数
+    list_per_page = 50
+
+# TreeVersionモデル用のカスタムAdminクラス
+@admin.register(TreeVersion)
+class TreeVersionAdmin(admin.ModelAdmin):
+    # リスト表示画面でのカラム指定
+    list_display = ('id', 'tree',)
+    
+    # idをクリックして編集画面に遷移できるように設定
+    list_display_links = ('id','tree')
+
+    # 検索対象のフィールド
+    search_fields = ['tree__name']
+
+    # 1ページあたりの表示件数
+    list_per_page = 50
+
+
+
+
+
 
 # Register your models here.
-models = [Tree,TreeStructure,TreeVersion,CodeCounter,CodeVersion,CodeVersionHistory]
+models = [CodeCounter,CodeVersion,CodeVersionHistory]
 admin.site.register(models)
