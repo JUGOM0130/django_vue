@@ -14,3 +14,6 @@ testvue
 
 # db
 *.sqlite3
+
+
+.vite/**
