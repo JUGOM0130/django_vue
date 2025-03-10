@@ -15,7 +15,7 @@ class Tree(models.Model):
     """ツリー自体を表すモデル。使い回される"""
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True, null=True)
-    version = models.IntegerField(default=0)  # ツリーバージョン
+    # version = models.IntegerField(default=0)  # ツリーバージョン
     create_at = models.DateTimeField(auto_now_add=True, verbose_name="作成日時")
     update_at = models.DateTimeField(auto_now=True, verbose_name="更新日時")
 
@@ -46,8 +46,15 @@ class Tree(models.Model):
                 )
 
         
+    @property
+    def current_version(self):
+        """最新のバージョンを取得"""
+        return self.versions.order_by('-version_number').first()
+
     def __str__(self):
-        return f"{self.name}, Version: {self.version}"
+        current_version = self.current_version
+        version_str = f", Version: {current_version.version_number}" if current_version else ""
+        return f"{self.name}{version_str}"
 
 class TreeStructure(models.Model):
     """親子関係を管理する中間モデル。特定のツリー内での親子関係を表す"""
@@ -70,13 +77,33 @@ class TreeStructure(models.Model):
 class TreeVersion(models.Model):
     """特定の文脈で使い回されるツリーのバージョン"""
     tree = models.ForeignKey(Tree, on_delete=models.CASCADE, related_name='versions')
+    version_number = models.IntegerField()  # バージョン番号を追加
     version_name = models.CharField(max_length=100)
     version_description = models.TextField(blank=True, null=True)
     create_at = models.DateTimeField(auto_now_add=True, verbose_name="作成日時")
     update_at = models.DateTimeField(auto_now=True, verbose_name="更新日時")
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['tree', 'version_number'],
+                name='unique_tree_version'
+            )
+        ]
+        indexes = [
+            models.Index(fields=['-version_number'], name='version_number_desc_idx')
+        ]
+        ordering = ['-version_number']
+
+    def save(self, *args, **kwargs):
+        if not self.version_number:
+            latest_version = TreeVersion.objects.filter(tree=self.tree).order_by('-version_number').first()
+            self.version_number = (latest_version.version_number + 1) if latest_version else 1
+        super().save(*args, **kwargs)
+
     def __str__(self):
-        return self.version_name
+        return f"{self.tree.name} v{self.version_number}: {self.version_name}"
+    
 
 class Prefix(models.Model):
     """コード生成のためのプレフィックスモデル"""
