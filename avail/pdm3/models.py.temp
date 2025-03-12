@@ -1,0 +1,49 @@
+class TreeVersion(models.Model):
+    """ツリーのバージョンを管理するモデル"""
+    tree = models.ForeignKey(Tree, on_delete=models.CASCADE, related_name='versions')
+    version_number = models.IntegerField()
+    version_name = models.CharField(max_length=100)
+    version_description = models.TextField(blank=True, null=True)
+    is_current = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True)
+
+    class Meta:
+        ordering = ['-version_number']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['tree', 'version_number'],
+                name='unique_tree_version'
+            )
+        ]
+
+class TreeStructureChange(models.Model):
+    """構造の変更履歴を管理するモデル"""
+    CHANGE_TYPE_CHOICES = [
+        ('ADD_NODE', 'ノード追加'),
+        ('DELETE_NODE', 'ノード削除'),
+        ('MOVE_NODE', 'ノード移動'),
+        ('MODIFY_NODE', 'ノード修正'),
+    ]
+
+    tree_version = models.ForeignKey(TreeVersion, on_delete=models.CASCADE, related_name='changes')
+    node = models.ForeignKey(Node, on_delete=models.CASCADE, related_name='changes')
+    change_type = models.CharField(max_length=20, choices=CHANGE_TYPE_CHOICES)
+    
+    # 親ノードの変更を記録
+    old_parent = models.ForeignKey(Node, null=True, blank=True, 
+                                 on_delete=models.SET_NULL, related_name='+')
+    new_parent = models.ForeignKey(Node, null=True, blank=True, 
+                                 on_delete=models.SET_NULL, related_name='+')
+    
+    # レベルの変更を記録
+    old_level = models.IntegerField(null=True)
+    new_level = models.IntegerField(null=True)
+    
+    # 変更理由などのメタデータ
+    change_reason = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True)
+
+    class Meta:
+        ordering = ['created_at']
