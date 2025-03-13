@@ -2,7 +2,8 @@
     //折り返す設定
     "editor.wordWrap": "on",
     "python.analysis.extraPaths": [
-        "/root/workspace/djang-env/lib/python3.9/site-packages"
+        "/root/workspace/djang-env/lib/python3.9/site-packages",
+        "C:\\Users\\Member1\\Desktop\\django_vue\\env\\Lib\\site-packages"
       ],
     "files.exclude": {
       "**/__pycache__": true

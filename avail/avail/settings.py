@@ -47,7 +47,9 @@ INSTALLED_APPS = [
     'entrypoint',
     'accounts',
     'pdm2',
-    'pdm3'
+    'pdm3',
+    'pdm4',
+    'core'
 
 ]
 
