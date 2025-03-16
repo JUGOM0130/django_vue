@@ -54,29 +54,7 @@ class CodeVersionHistory(models.Model):
 
     def __str__(self):
         return f"{self.node.name}: {self.code}, Z{self.version:04d} at {self.datetime_created}"
-
-class CodeVersion(models.Model):
-    """コードのバージョン管理（統合モデル）"""
-    node = models.ForeignKey(Node, on_delete=models.CASCADE, related_name='versions')
-    code = models.CharField(max_length=50)
-    version = models.IntegerField()
-    is_current = models.BooleanField(default=True)  # 現在のバージョンかどうか
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
     
-    class Meta:
-        constraints = [
-            # 各ノードの現在のバージョンは1つだけ
-            models.UniqueConstraint(
-                fields=['node'],
-                condition=models.Q(is_current=True),
-                name='unique_current_version'
-            )
-        ]
-        indexes = [
-            models.Index(fields=['code', '-version']),
-            models.Index(fields=['node', 'is_current'])
-        ]
 
 class Tree(models.Model):
     """ツリー自体を表すモデル。使い回される"""
