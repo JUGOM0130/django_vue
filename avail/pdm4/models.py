@@ -3,8 +3,6 @@ from django.db import models, transaction
 from django.utils import timezone
 from core.models import BaseModel
 import math
-
-
 """
 PDMシステムを作成します
 プログラムコードを提示するときはコメントを記載してください。どんな処理をしているか

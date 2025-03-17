@@ -21,6 +21,10 @@ from django.urls import path,include
 from rest_framework.schemas import get_schema_view
 from django.views.generic import TemplateView
 
+# Swaggerへ表示したいURLパターンを定義
+api_patterns = [
+    path('api4/', include('pdm4.urls')),  # 表示したいAPIのみ記述
+]
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -35,11 +39,12 @@ urlpatterns = [
     
     # Swagger関連
     path('schema/', get_schema_view(          # スキーマ表示の追加
-         title="任意",
-         description="任意"
+         title="API一覧",
+         description="description",
+         patterns=api_patterns,  # 表示したいパターンのみを指定
      ), name='openapi-schema'),
-     path('docs/', TemplateView.as_view(       # ドキュメント表示の追加
-         template_name='swagger-ui.html',
-         extra_context={'schema_url':'openapi-schema'}
-     ), name='swagger-ui'),
+    path('docs/', TemplateView.as_view(       # ドキュメント表示の追加
+        template_name='swagger-ui.html',
+        extra_context={'schema_url':'openapi-schema'}
+    ), name='swagger-ui'),
 ]
