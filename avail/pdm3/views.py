@@ -13,6 +13,7 @@ from .serializers import (
     CodeUpdateSerializer, CodeVersionHistorySerializer
 )
 from .utils import generate_code, logger
+from drf_yasg.utils import swagger_auto_schema
 
 # 基本的な CRUD 操作を提供する ViewSet クラス群
 class NodeViewSet(viewsets.ModelViewSet):
@@ -26,6 +27,15 @@ class TreeStructureViewSet(viewsets.ModelViewSet):
     queryset = TreeStructure.objects.all()
     serializer_class = TreeStructureSerializer
 
+    @swagger_auto_schema(
+        method='post',
+        operation_description="カスタムアクションの説明",
+        request_body=TreeStructureSerializer,
+        responses={
+            200: TreeStructureSerializer,
+            400: 'Bad Request'
+        }
+    )
     @action(detail=False, methods=['post'])
     def bulk_create(self, request):
         """
