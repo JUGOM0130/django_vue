@@ -14,7 +14,8 @@ from pdm4.models import (
     Tree,
     TreeNode,
     TreeStructure,
-    TreeVersion
+    TreeVersion,
+    TreeChangeLog
 )
 
 class Command(BaseCommand):
@@ -44,7 +45,11 @@ class Command(BaseCommand):
                 prefixes = self._initialize_prefixes()
                 
                 # サンプルコードの作成
-                sample_codes = self._create_sample_codes(prefixes, admin_user)
+                sample_codes = []
+                try:
+                    sample_codes = self._create_sample_codes(prefixes, admin_user)
+                except Exception as code_error:
+                    self.stdout.write(self.style.WARNING(f'サンプルコードの作成中にエラーが発生しました: {str(code_error)}'))
                 
                 # サンプルツリーの作成
                 sample_trees = self._create_sample_trees(sample_codes, admin_user)
@@ -80,6 +85,7 @@ class Command(BaseCommand):
         return admin
     
     def _initialize_prefixes(self):
+
         """プレフィックスの初期化"""
         self.stdout.write('プレフィックスを初期化しています...')
         
@@ -124,7 +130,6 @@ class Command(BaseCommand):
         
         return prefixes
     
-    def _create_sample_codes(self, prefixes, user):
         """サンプルコードの作成"""
         self.stdout.write('サンプルコードを作成しています...')
         
@@ -263,10 +268,186 @@ class Command(BaseCommand):
             self.stdout.write(f'- コード "{code.code}" ({code.name}) を作成しました。')
         
         return sample_codes
-    
+
+    def _create_sample_codes(self, prefixes, user):
+        """サンプルコードの作成"""
+        self.stdout.write('サンプルコードを作成しています...')
+        
+        # すべての関連データを削除
+        CodeChangeLog.objects.all().delete()
+        CodeMetadata.objects.all().delete()
+        CodeVersion.objects.all().delete()
+        Code.objects.all().delete()
+        
+        # 各プレフィックスのシーケンシャル番号を追跡
+        prefix_sequential_numbers = {}
+        
+        sample_codes = []
+        
+        # サンプルコードの定義
+        code_data = [
+            # 組立部品
+            {
+                'prefix_name': 'AAA',
+                'name': '製品A',
+                'description': '最終製品A',
+                'metadata': {
+                    'unit': 'piece',
+                    'category': 'mechanical',
+                    'weight': 5.000,
+                    'dimensions': '200x150x100mm'
+                }
+            },
+            {
+                'prefix_name': 'AAA',
+                'name': 'サブアセンブリB',
+                'description': '製品Aのサブアセンブリ',
+                'metadata': {
+                    'unit': 'piece',
+                    'category': 'mechanical',
+                    'weight': 2.500,
+                    'dimensions': '150x100x50mm'
+                }
+            },
+            # 電子部品
+            {
+                'prefix_name': 'BBB',
+                'name': '基板X',
+                'description': '制御基板',
+                'metadata': {
+                    'unit': 'piece',
+                    'category': 'electronic',
+                    'material': 'FR-4',
+                    'weight': 0.120,
+                    'dimensions': '100x80x1.6mm'
+                }
+            },
+            {
+                'prefix_name': 'BBB',
+                'name': 'コネクタY',
+                'description': 'USB Type-Cコネクタ',
+                'metadata': {
+                    'unit': 'piece',
+                    'category': 'electronic',
+                    'material': 'メタル+プラスチック',
+                    'weight': 0.005
+                }
+            },
+            # 購入品
+            {
+                'prefix_name': 'CCC',
+                'name': 'ネジM3x10',
+                'description': 'M3x10mm六角穴付きボルト',
+                'metadata': {
+                    'unit': 'piece',
+                    'category': 'hardware',
+                    'material': 'SUS304',
+                    'weight': 0.002
+                }
+            },
+            {
+                'prefix_name': 'CCC',
+                'name': 'ケーブルUSB',
+                'description': 'USB Type-Cケーブル 1m',
+                'metadata': {
+                    'unit': 'piece',
+                    'category': 'consumable',
+                    'weight': 0.050,
+                    'dimensions': '1000mm'
+                }
+            }
+        ]
+        
+        for data in code_data:
+            # プレフィックスを取得
+            prefix = next((p for p in prefixes if p.name == data['prefix_name']), None)
+            if not prefix:
+                self.stdout.write(self.style.WARNING(f'プレフィックス "{data["prefix_name"]}" が見つかりません。スキップします。'))
+                continue
+            
+            # 各プレフィックスの次のシーケンシャル番号を管理
+            if prefix.name not in prefix_sequential_numbers:
+                prefix_sequential_numbers[prefix.name] = 1
+            
+            # コードを生成
+            # 手動で一意のコードを生成（プレフィックスを直接操作）
+            code_format_map = {
+                '1': 'A{:04d}Z000',    # 組
+                '2': 'AA{:04d}Z000',   # 部品
+                '3': 'A{:04d}Z00'      # 購入品
+            }
+            
+            # 現在のシーケンシャル番号を使用してコードを生成
+            number_format = code_format_map.get(prefix.code_type)
+            sequential_number = prefix_sequential_numbers[prefix.name]
+            code_part = number_format.format(sequential_number)
+            code_string = f"{prefix.name}-{code_part}"
+            
+            # Codeモデル作成
+            code = Code.objects.create(
+                code=code_string,
+                name=data['name'],
+                prefix=prefix,
+                description=data['description'],
+                sequential_number=sequential_number,
+                status='active'
+            )
+            
+            # シーケンシャル番号をインクリメント
+            prefix_sequential_numbers[prefix.name] += 1
+            
+            # CodeVersionモデル作成
+            code_version = CodeVersion.objects.create(
+                code=code,
+                version=1,
+                code_number=code_string,
+                is_current=True,
+                status='approved',
+                reason='初期作成',
+                changed_by=user,
+                effective_date=timezone.now()
+            )
+            
+            # メタデータ作成
+            metadata = data.get('metadata', {})
+            if metadata:
+                CodeMetadata.objects.create(
+                    code_version=code_version,
+                    unit=metadata.get('unit', 'piece'),
+                    material=metadata.get('material'),
+                    category=metadata.get('category', 'other'),
+                    keywords=metadata.get('keywords', ''),
+                    weight=metadata.get('weight'),
+                    dimensions=metadata.get('dimensions', ''),
+                    notes=metadata.get('notes', '')
+                )
+            
+            # 変更履歴を作成
+            CodeChangeLog.objects.create(
+                code_version=code_version,
+                changed_by=user,
+                change_type='create',
+                reason='初期データ登録',
+                new_status='approved'
+            )
+            
+            sample_codes.append(code)
+            self.stdout.write(f'- コード "{code.code}" ({code.name}) を作成しました。')
+        
+        return sample_codes
+
+
+
     def _create_sample_trees(self, sample_codes, user):
         """サンプルツリーの作成"""
         self.stdout.write('サンプルツリーを作成しています...')
+        
+        # 既存のツリー関連データを削除
+        TreeChangeLog.objects.all().delete()
+        TreeVersion.objects.all().delete()
+        TreeStructure.objects.all().delete()
+        TreeNode.objects.all().delete()
+        Tree.objects.all().delete()
         
         sample_trees = []
         
@@ -294,6 +475,24 @@ class Command(BaseCommand):
                 last_modified_by=user
             )
             
+            # ルートノードを作成
+            root_node = TreeNode.objects.create(
+                name=f"{tree.name}_ROOT",
+                description=f"ツリー「{tree.name}」のルートノード",
+                node_type='root',
+                status='active'
+            )
+            
+            # ツリー構造を作成
+            root_structure = TreeStructure.objects.create(
+                tree=tree,
+                node=root_node,
+                parent=None,
+                level=0,
+                path=str(root_node.id),
+                is_master=True
+            )
+            
             # TreeVersionを作成
             tree_version = TreeVersion.objects.create(
                 tree=tree,
@@ -309,11 +508,8 @@ class Command(BaseCommand):
             sample_trees.append(tree)
             self.stdout.write(f'- ツリー "{tree.name}" を作成しました。')
             
-            # ルートノード取得
-            root_structure = tree.nodes.filter(parent=None).first()
-            
-            # 最初のツリーなら階層構造を作成
-            if tree.name == '製品Aツリー' and root_structure and len(sample_codes) >= 5:
+            # サンプルコードが存在し、十分な数がある場合のみ階層構造を作成
+            if sample_codes and len(sample_codes) >= 5 and tree.name == '製品Aツリー':
                 # 製品A（最初のコード）のツリーノードを作成
                 product_a = sample_codes[0]
                 product_a_node = TreeNode.objects.create(
@@ -428,3 +624,7 @@ class Command(BaseCommand):
                 self.stdout.write(f'  - ノード "{screw.name}" を追加しました。')
         
         return sample_trees
+
+
+
+

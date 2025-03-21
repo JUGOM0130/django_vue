@@ -1,6 +1,6 @@
 from rest_framework import serializers
-from .models import Prefix,Code,CodeVersion,CodeChangeLog,CodeMetadata
-from .models import Tree,TreeStructure,TreeVersion,TreeCodeQuantity,TreeChangeLog
+from .models import Prefix,Code,CodeVersion,CodeChangeLog,CodeMetadata,TreeNode
+from .models import Tree,TreeStructure,TreeVersion,TreeCodeQuantity,TreeChangeLog,TreeNode
 
 
 class BaseModelSerializer(serializers.ModelSerializer):
@@ -48,3 +48,8 @@ class TreeCodeQuantitySerializer(BaseModelSerializer):
 class TreeChangeLogSerializer(BaseModelSerializer):
     class Meta(BaseModelSerializer.Meta):
         model = TreeChangeLog
+
+class TreeNodeSerializer(BaseModelSerializer):
+    class Meta(BaseModelSerializer.Meta):
+        model = TreeNode
+
