@@ -6,7 +6,9 @@ import math
 """
 PDMシステムを作成します
 プログラムコードを提示するときはコメントを記載してください。どんな処理をしているか
-バックエンドはDjango
+バックエンドはDjango Rest Frameworkを使用して作成します。
+  レスポンスには必ずsuccessとmessageを返すようにしてください
+  successはTrueかFalseで返し、messageはエラーメッセージや成功メッセージを返してください
 フロントエンドはVuejs3のCompositionAPIを使用して作成します。
 constraintsを使用してくださいuniquetogetherは非推奨です
 verbose_nameやhelp_text等記載してください
@@ -756,7 +758,7 @@ class CodeMetadata(BaseModel):
 ""
 ""
 class Tree(BaseModel):
-    """ツリー構造全体を管理するモデル"""
+    """ツリー構造全体を管理するモデル（リファクタリング版）"""
     STATUS_CHOICES = [
         ('draft', '作成中'),
         ('active', '有効'),
@@ -823,138 +825,106 @@ class Tree(BaseModel):
             # 1. まずTreeを保存
             super().save(*args, **kwargs)
             
-            # 2. 新規作成時のみ、NodeとTreeStructureも作成
+            # 2. 新規作成時のみ、ルートノードとツリー構造を作成
             if is_new:
                 # ルートノードを作成
-                root_node = Code.objects.create(
+                root_node = TreeNode.objects.create(
                     name=f"{self.name}_ROOT",
-                    description=f"Root node for tree: {self.name}",
+                    description=f"ツリー「{self.name}」のルートノード",
+                    node_type='root',
                     status='active'
                 )
-                # TreeStructureも作成
+                
+                # ツリー構造を作成
                 TreeStructure.objects.create(
                     tree=self,
+                    node=root_node,
                     parent=None,
-                    current_node=root_node,
                     level=0,
                     path=str(root_node.id),
                     is_master=True  # ルートノードはマスター
                 )
 
-    def get_root_node(self):
-        """ルートノードを取得"""
-        return self.nodes.filter(parent=None).first()
-
-    def get_all_nodes(self):
-        """全ノードを取得（階層順）"""
-        return self.nodes.all().order_by('level', 'path')
-
-    def get_node_by_path(self, path):
-        """パスからノードを取得"""
-        return self.nodes.filter(path=path).first()
-
-    def create_node(self, parent_node, code, is_master=False):
-        """新しいノードを作成"""
-        if not parent_node:
-            raise ValueError("親ノードが指定されていません")
-
-        parent_structure = self.nodes.get(current_node=parent_node)
-        
-        new_structure = TreeStructure.objects.create(
-            tree=self,
-            parent=parent_structure,
-            current_node=code,
-            level=parent_structure.level + 1,
-            path=f"{parent_structure.path}.{code.id}",
-            is_master=is_master
-        )
-        return new_structure
-
-    def clone(self, new_name, new_description=None, user=None):
-        """ツリーを複製"""
-        with transaction.atomic():
-            # 新しいツリーを作成
-            new_tree = Tree.objects.create(
-                name=new_name,
-                description=new_description or self.description,
-                status='draft',
-                version=1,
-                created_by=user
-            )
-
-            # 全ノードをコピー
-            node_mapping = {}  # 古いノード -> 新しいノード
-            
-            for structure in self.get_all_nodes():
-                # 親ノードを特定
-                new_parent = node_mapping.get(structure.parent.id) if structure.parent else None
-                
-                # 新しいノードを作成
-                new_structure = TreeStructure.objects.create(
-                    tree=new_tree,
-                    parent=new_parent,
-                    current_node=structure.current_node,
-                    level=structure.level,
-                    path=structure.path,
-                    is_master=structure.is_master
-                )
-                node_mapping[structure.id] = new_structure
-
-            return new_tree
-
-    def activate(self, user):
-        """ツリーを有効化"""
-        if self.status != 'draft':
-            raise ValueError("作成中のツリーのみ有効化できます")
-        self.status = 'active'
-        self.last_modified_by = user
-        self.save()
-
-    def archive(self, user):
-        """ツリーをアーカイブ"""
-        if self.status != 'active':
-            raise ValueError("有効なツリーのみアーカイブできます")
-        self.status = 'archived'
-        self.last_modified_by = user
-        self.save()
-
-    def lock(self, user):
-        """ツリーをロック"""
-        if self.status not in ['active', 'draft']:
-            raise ValueError("有効または作成中のツリーのみロックできます")
-        self.status = 'locked'
-        self.last_modified_by = user
-        self.save()
-
-    def get_node_count(self):
-        """ツリー内のノード数を取得"""
-        return self.nodes.count()
-
-    def get_max_depth(self):
-        """ツリーの最大深さを取得"""
-        return self.nodes.aggregate(max_depth=models.Max('level'))['max_depth']
-
-    def validate_structure(self):
-        """ツリー構造の整合性をチェック"""
-        # パスの整合性チェック
-        all_nodes = self.get_all_nodes()
-        for node in all_nodes:
-            if node.parent:
-                if not node.path.startswith(f"{node.parent.path}."):
-                    return False
-                
-        # レベルの整合性チェック
-        for node in all_nodes:
-            if node.parent:
-                if node.level != node.parent.level + 1:
-                    return False
-
-        return True
+class TreeNode(BaseModel):
+    """ツリー構造のノードを表すモデル"""
+    NODE_TYPE_CHOICES = [
+        ('root', 'ルートノード'),
+        ('code', 'コードノード'),   # 部品コードに関連付けられたノード
+        ('group', 'グループノード')  # 単なるグループ化のためのノード
+    ]
     
+    STATUS_CHOICES = [
+        ('draft', '下書き'),
+        ('active', '有効'),
+        ('obsolete', '廃止')
+    ]
+
+    name = models.CharField(
+        max_length=100,
+        verbose_name="ノード名",
+        help_text="このノードの表示名"
+    )
+    description = models.TextField(
+        blank=True, 
+        null=True,
+        verbose_name="説明",
+        help_text="このノードの説明"
+    )
+    node_type = models.CharField(
+        max_length=20,
+        choices=NODE_TYPE_CHOICES,
+        default='code',
+        verbose_name="ノードタイプ",
+        help_text="ノードの種類（ルート、コード、グループ）"
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='active',
+        verbose_name="状態",
+        help_text="ノードの現在の状態"
+    )
+    code = models.ForeignKey(
+        'Code',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='tree_nodes',
+        verbose_name="関連コード",
+        help_text="このノードに関連付けられた部品コード（ある場合）"
+    )
+
+    class Meta:
+        verbose_name = "ツリーノード"
+        verbose_name_plural = "ツリーノード"
+        indexes = [
+            models.Index(fields=['node_type'], name='pdm4_node_type_idx'),
+            models.Index(fields=['status'], name='pdm4_node_status_idx'),
+        ]
+
+    def __str__(self):
+        code_str = f" ({self.code.code})" if self.code else ""
+        return f"{self.name}{code_str} - {self.get_node_type_display()}"
+    
+    @property
+    def is_root(self):
+        """ルートノードかどうかを判定"""
+        return self.node_type == 'root'
+    
+    @property
+    def is_group(self):
+        """グループノードかどうかを判定"""
+        return self.node_type == 'group'
+    
+    @property
+    def has_code(self):
+        """コードが関連付けられているかどうかを判定"""
+        return self.code is not None
+
 
 
 class TreeStructure(BaseModel):
-    """ツリー構造の親子関係を管理するモデル"""
+    """ツリー構造の親子関係を管理するモデル（リファクタリング版）"""
     RELATIONSHIP_CHOICES = [
         ('assembly', '組立'),
         ('reference', '参照'),
@@ -964,30 +934,28 @@ class TreeStructure(BaseModel):
         ('phantom', 'ファントム')
     ]
 
+    tree = models.ForeignKey(
+        'Tree',
+        on_delete=models.CASCADE,
+        related_name='nodes',  # 関連名を変更
+        verbose_name="所属ツリー",
+        help_text="このノードが属するツリー"
+    )
+    node = models.ForeignKey(
+        TreeNode,
+        on_delete=models.CASCADE,
+        related_name='structures',
+        verbose_name="ノード",
+        help_text="このツリー構造のノード"
+    )
     parent = models.ForeignKey(
-        Code,
+        'self',
         null=True,
         blank=True,
         on_delete=models.CASCADE,
         related_name='children',
-        verbose_name="親ノード",
-        help_text="上位の部品コード"
-    )
-    current_node = models.ForeignKey(
-        Code,
-        null=True,
-        blank=True,
-        on_delete=models.CASCADE,
-        related_name='parents',
-        verbose_name="現在のノード",
-        help_text="この構造が表す部品コード"
-    )
-    tree = models.ForeignKey(
-        Tree,
-        on_delete=models.CASCADE,
-        related_name='relationships',
-        verbose_name="所属ツリー",
-        help_text="このノードが属するツリー"
+        verbose_name="親構造",
+        help_text="親ノードの構造（ルートノードの場合はnull）"
     )
     level = models.IntegerField(
         verbose_name="階層レベル",
@@ -1047,118 +1015,28 @@ class TreeStructure(BaseModel):
     class Meta:
         verbose_name = "ツリー構造"
         verbose_name_plural = "ツリー構造"
-        unique_together = ('parent', 'current_node', 'tree')
+        unique_together = ('tree', 'node', 'parent')
         ordering = ['level', 'sequence']
         indexes = [
             models.Index(fields=['tree', 'level'], name='pdm4_tree_level_idx'),
             models.Index(fields=['path'], name='pdm4_path_idx'),
             models.Index(fields=['is_master'], name='pdm4_master_idx'),
-            models.Index(fields=['relationship_type'], name='pdm4_rel_type_idx'),
-            models.Index(fields=['effective_date'], name='pdm4_effective_date_idx'),
-            models.Index(fields=['expiry_date'], name='pdm4_expiry_date_idx')
         ]
 
-    def clean(self):
-        """バリデーション処理"""
-        from django.core.exceptions import ValidationError
-        
-        if self.parent == self.current_node:
-            raise ValidationError({
-                'parent': '親ノードと現在のノードが同じです。循環参照はできません。'
-            })
-        
-        if self.level < 0:
-            raise ValidationError({
-                'level': '階層レベルは0以上である必要があります。'
-            })
-
-        # 日付の整合性チェック
-        if self.effective_date and self.expiry_date:
-            if self.effective_date >= self.expiry_date:
-                raise ValidationError({
-                    'effective_date': '有効開始日は有効終了日より前である必要があります。'
-                })
-
-        # 共有構造のチェック
-        if self.source_structure:
-            if self.is_master:
-                raise ValidationError({
-                    'is_master': '共有インスタンスはマスター構造になれません。'
-                })
+    def __str__(self):
+        parent_str = f" (親:{self.parent.node.name})" if self.parent else " (ルート)"
+        return f"{self.tree.name} - {self.node.name}{parent_str}"
 
     def save(self, *args, **kwargs):
         """保存前の処理"""
         if not self.path and self.parent:
             # パスが未設定で親がある場合、親のパスを基に設定
-            self.path = f"{self.parent.path}.{self.current_node.id}"
+            self.path = f"{self.parent.path}.{self.node.id}"
         elif not self.path:
             # ルートノードの場合
-            self.path = str(self.current_node.id)
+            self.path = str(self.node.id)
         
         super().save(*args, **kwargs)
-
-    def __str__(self):
-        return f"{self.tree.name} - {self.current_node} (Level:{self.level})"
-
-    def get_children(self):
-        """子ノードを取得"""
-        return TreeStructure.objects.filter(
-            tree=self.tree,
-            parent=self.current_node
-        ).order_by('sequence')
-
-    def get_siblings(self):
-        """同階層のノードを取得"""
-        return TreeStructure.objects.filter(
-            tree=self.tree,
-            parent=self.parent
-        ).exclude(id=self.id).order_by('sequence')
-
-    def get_ancestors(self):
-        """先祖ノードを取得"""
-        ancestor_paths = self.path.split('.')[:-1]
-        return TreeStructure.objects.filter(
-            tree=self.tree,
-            current_node__id__in=ancestor_paths
-        ).order_by('level')
-
-    def is_leaf(self):
-        """葉ノードかどうかを判定"""
-        return not TreeStructure.objects.filter(
-            tree=self.tree,
-            parent=self.current_node
-        ).exists()
-
-    def is_valid_at(self, date):
-        """指定日時での有効性を判定"""
-        if not self.effective_date and not self.expiry_date:
-            return True
-        if self.effective_date and date < self.effective_date:
-            return False
-        if self.expiry_date and date >= self.expiry_date:
-            return False
-        return True
-
-    def create_shared_instance(self, new_parent, sequence=0):
-        """共有インスタンスを作成"""
-        return TreeStructure.objects.create(
-            parent=new_parent,
-            current_node=self.current_node,
-            tree=self.tree,
-            level=new_parent.level + 1,
-            sequence=sequence,
-            relationship_type=self.relationship_type,
-            source_structure=self if self.is_master else self.source_structure,
-            quantity=self.quantity
-        )
-
-    def update_sequence(self, new_sequence):
-        """表示順序を更新"""
-        old_sequence = self.sequence
-        self.sequence = new_sequence
-        self.save()
-
-
 class TreeVersion(BaseModel):
     """特定の文脈で使い回されるツリーのバージョン管理モデル"""
     STATUS_CHOICES = [
