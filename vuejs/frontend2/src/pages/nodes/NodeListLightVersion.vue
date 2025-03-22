@@ -1,7 +1,10 @@
 <script setup>
 import { ref, onMounted, defineEmits } from 'vue'
 import { getAllNode } from '@/api/node'
+import axios from '@/api/settings'
+import { CODE_TYPE_CHOICES } from '@/api/prefix';
 
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
 
 // 親コンポーネントにデータを送信する
 const emit = defineEmits(['data-sent'])
@@ -12,11 +15,15 @@ const nodes = ref([])
  * ノード一覧を取得
  */
 const fetchNodes = async () => {
-    const list = await getAllNode()
+    const list = await axios.get(`${apiBaseUrl}/tree-node/`)
 
     // 余計なデータを削除
     nodes.value = list.data.map(({ create_at, update_at, description, ...item }) => ({
-        ...item
+        id: item.id,
+        name: item.name,
+        node_type: item.node_type,
+        status: item.status,
+        code: item.code,
     }))
 }
 
