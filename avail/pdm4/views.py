@@ -1001,3 +1001,8 @@ class TreeChangeLogViewSet(viewsets.ModelViewSet):
         
         # 重複を削除
         return list(set(stakeholders))
+    
+class TreeNodeViewSet(viewsets.ModelViewSet):
+    """TreeNodeの作成・読取・更新・削除を行うViewSet"""
+    queryset = TreeNode.objects.all()
+    serializer_class = TreeNodeSerializer

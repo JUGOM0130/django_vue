@@ -12,6 +12,8 @@ const router = useRouter();
 // APIのベースURL
 const apiBaseUrlCode = import.meta.env.VITE_API_BASE_URL + "/code";
 const apiBaseUrlTree = import.meta.env.VITE_API_BASE_URL + "/tree";
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
+
 
 // 状態管理
 const tree = ref(null);
@@ -143,7 +145,8 @@ const canDeleteNode = computed(() => {
   return true;
 });
 
-// ツリーデータの取得
+
+// fetchTreeDataメソッドの修正
 const fetchTreeData = async () => {
   const treeId = route.query.id;
   if (!treeId) {
@@ -153,36 +156,143 @@ const fetchTreeData = async () => {
   }
 
   try {
-    // ツリー基本情報を取得
-    const treeResponse = await axios.get(`${apiBaseUrlTree}/${treeId}`);
-    tree.value = treeResponse.data.data;
+    // ローディング開始
+    isLoading.value = true;
+
+    // まずツリー自体の情報を取得
+    try {
+      const treeResponse = await axios.get(`${apiBaseUrlTree}/${treeId}/`);
+
+      // APIレスポンスの形式によって調整が必要
+      // データがdataプロパティにネストされているか確認
+      if (treeResponse.data && treeResponse.data.data) {
+        tree.value = treeResponse.data.data;
+      } else {
+        tree.value = treeResponse.data;
+      }
+
+      console.log('Fetched tree data:', tree.value);
+
+      // tree.valueがオブジェクトでidプロパティを持っていることを確認
+      if (!tree.value || typeof tree.value !== 'object' || !tree.value.id) {
+        throw new Error('取得したツリーデータが不正です');
+      }
+    } catch (error) {
+      console.error('ツリー基本情報の取得に失敗しました:', error);
+      errorMessage.value = 'ツリー基本情報の取得に失敗しました';
+      isLoading.value = false;
+      return;
+    }
 
     // ツリー構造を取得
     const structureResponse = await axios.get(`${apiBaseUrlTree}/${treeId}/structure/`);
-    treeNodes.value = buildTreeStructure(structureResponse.data.data);
+    console.log('Structure response:', structureResponse.data);
 
-    // organizedTreeを構築
-    buildOrganizedTree();
+    // レスポンスからデータを抽出（APIの形式に応じて調整）
+    let structureData;
+    if (structureResponse.data && Array.isArray(structureResponse.data.data)) {
+      structureData = structureResponse.data.data;
+    } else if (Array.isArray(structureResponse.data)) {
+      structureData = structureResponse.data;
+    } else {
+      throw new Error('ツリー構造データの形式が不正です');
+    }
 
-    // 利用可能なコードのリストを取得
-    await fetchAvailableCodes();
+    // ノード情報を並行して取得
+    if (structureData.length === 0) {
+      // 構造が空の場合
+      treeNodes.value = [];
+      organizedTree.value = [];
+    } else {
+      const nodeIds = structureData.map(item => item.node);
+      const nodeDetailsPromises = nodeIds.map(nodeId =>
+        axios.get(`${apiBaseUrl}/tree-node/${nodeId}/`)
+      );
 
-    // 利用可能なツリーのリストを取得
-    await fetchAvailableTrees();
+      const nodeDetailsResponses = await Promise.all(nodeDetailsPromises);
+      const nodeDetailsMap = new Map(
+        nodeDetailsResponses.map(response => {
+          // レスポンスの形式によって調整
+          const data = response.data.data || response.data;
+          return [data.id, data];
+        })
+      );
 
-    state.isInitialized = true;
+      // ツリー構造を構築
+      treeNodes.value = buildTreeStructure(structureData, nodeDetailsMap);
+
+      // organizedTreeを構築
+      buildOrganizedTree();
+    }
+
+    console.log('Processed Tree Nodes:', treeNodes.value);
+    console.log('Organized Tree:', organizedTree.value);
+
   } catch (error) {
     console.error('ツリーデータの取得に失敗しました:', error);
-    errorMessage.value = error.response?.data?.message || 'ツリーデータの取得に失敗しました';
-    state.errorMessage = errorMessage.value;
+    errorMessage.value = error.response?.data?.message || error.message || 'ツリーデータの取得に失敗しました';
   } finally {
+    // 状態の更新
+    state.isInitialized = true;
     isLoading.value = false;
-    state.loading = false;
   }
 };
 
-// organizedTreeを構築する関数
+const buildTreeStructure = (data, nodeDetailsMap) => {
+  console.log('Building tree structure from:', data);
+
+  const nodesMap = new Map();
+
+  // まず全ノードをマップに登録
+  data.forEach(item => {
+    const nodeDetails = nodeDetailsMap.get(item.node) || {};
+
+    const node = {
+      id: item.id,
+      node_id: item.node,
+      name: nodeDetails.name || 'Unknown',
+      node_type: nodeDetails.node_type || 'unknown',
+      description: nodeDetails.description || '',
+      code: nodeDetails.code,
+      level: item.level,
+      path: item.path,
+      relationship_type: item.relationship_type || 'assembly',
+      quantity: parseFloat(item.quantity) || 1,
+      is_master: item.is_master || false,
+      parent_id: item.parent,
+      source_structure: item.source_structure,
+      structure_id: item.id,
+      children: []
+    };
+
+    nodesMap.set(item.id, node);
+  });
+
+  // 親子関係を構築
+  const rootNodes = [];
+  data.forEach(item => {
+    const node = nodesMap.get(item.id);
+
+    if (item.parent) {
+      const parentNode = nodesMap.get(item.parent);
+      if (parentNode) {
+        // 子ノードを親ノードのchildrenに追加
+        parentNode.children.push(node);
+      }
+    } else {
+      rootNodes.push(node);
+    }
+  });
+
+  console.log('Root Nodes:', rootNodes);
+  return rootNodes;
+};
+
+
+
+// buildOrganizedTreeメソッドを修正
 const buildOrganizedTree = () => {
+  console.log('ツリーデータ:', treeNodes.value);
   if (!treeNodes.value || treeNodes.value.length === 0) {
     organizedTree.value = [];
     return;
@@ -196,9 +306,9 @@ const buildOrganizedTree = () => {
       uniqueKey: `${parent}-${node.id}-${level}`,
       parent: parent,
       child: node.id,
-      name: node.name || 'unnamed', // nameがundefinedの場合のデフォルト値
+      name: node.name || 'unnamed',
       level: level,
-      node_type: node.node_type || 'unknown', // node_typeがundefinedの場合のデフォルト値
+      node_type: node.node_type || 'unknown',
       relationship_type: node.relationship_type || 'assembly',
       quantity: node.quantity || 1,
       is_master: node.is_master || false,
@@ -222,46 +332,7 @@ const buildOrganizedTree = () => {
   organizedTree.value = result;
 };
 
-// ツリー構造データを整形
-const buildTreeStructure = (data) => {
-  const nodesMap = new Map();
 
-  // まず全ノードをマップに登録
-  data.forEach(item => {
-    nodesMap.set(item.id, {
-      id: item.id,
-      name: item.node.name || 'unnamed', // nameがundefinedの場合のデフォルト値
-      node_type: item.node.node_type || 'unknown', // node_typeがundefinedの場合のデフォルト値
-      description: item.node.description || '',
-      code: item.node.code,
-      level: item.level,
-      path: item.path,
-      relationship_type: item.relationship_type || 'assembly',
-      quantity: item.quantity || 1,
-      is_master: item.is_master || false,
-      source_structure: item.source_structure,
-      structure_id: item.id,
-      is_shared: !!item.source_structure,
-      children: []
-    });
-  });
-
-  // 親子関係を構築
-  const rootNodes = [];
-  data.forEach(item => {
-    const node = nodesMap.get(item.id);
-    if (item.parent) {
-      const parentNode = nodesMap.get(item.parent.id);
-      if (parentNode) {
-        parentNode.children.push(node);
-      }
-    } else {
-      rootNodes.push(node);
-    }
-  });
-
-  return rootNodes;
-};
 
 // ノードを再帰的に平坦化して選択肢用のリストを作成
 const flattenNodes = (nodes, result = []) => {
@@ -442,24 +513,7 @@ const goBack = () => {
   router.push({ name: 'tree_list' });
 };
 
-// ノード追加ダイアログを表示
-const showAddNodeDialog = () => {
-  // フォームをリセット
-  newNode.parent_id = selectedNode.value ? selectedNode.value.id : '';
-  newNode.node_type = 'code';
-  newNode.name = '';
-  newNode.description = '';
-  newNode.code_id = null;
-  newNode.relationship_type = 'assembly';
-  newNode.quantity = 1;
-  newNode.is_master = false;
 
-  // フォームのバリデーションをリセット
-  if (addNodeForm.value) addNodeForm.value.resetValidation();
-
-  // ダイアログを表示
-  addNodeDialog.value = true;
-};
 
 // ノードを追加
 const addNode = async () => {
@@ -468,7 +522,15 @@ const addNode = async () => {
   isAdding.value = true;
 
   try {
-    const response = await axios.post(`${apiBaseUrlTree}/${tree.value.id}/add_node/`, {
+    // API URL と tree.value が正しく設定されているか確認
+    if (!tree.value || !tree.value.id) {
+      errorMessage.value = 'ツリー情報が正しく設定されていません';
+      console.error('Tree information is not properly set:', tree.value);
+      isAdding.value = false;
+      return;
+    }
+
+    const requestData = {
       parent_id: newNode.parent_id,
       name: newNode.name,
       description: newNode.description,
@@ -477,7 +539,11 @@ const addNode = async () => {
       relationship_type: newNode.relationship_type,
       quantity: newNode.quantity,
       is_master: newNode.is_master
-    });
+    };
+
+    console.log('Adding node with data:', requestData);
+
+    const response = await axios.post(`${apiBaseUrlTree}/${tree.value.id}/add_node/`, requestData);
 
     if (response.data.success) {
       // ダイアログを閉じる
@@ -490,6 +556,7 @@ const addNode = async () => {
       // Vuetifyのスナックバーなどを使用する場合はここで表示
     } else {
       errorMessage.value = response.data.message || 'ノードの追加に失敗しました';
+      console.error('Server returned error:', response.data);
     }
   } catch (error) {
     console.error('ノード追加エラー:', error);
@@ -531,14 +598,14 @@ const updateNode = async () => {
 
   try {
     // ノード情報の更新
-    const nodeResponse = await axios.patch(`${apiBaseUrlTree}nodes/${editingNode.id}/`, {
+    const nodeResponse = await axios.patch(`${apiBaseUrl}/tree-node/${editingNode.id}/`, {
       name: editingNode.name,
       description: editingNode.description,
       code_id: editingNode.node_type === 'code' && editingNode.code_id ? editingNode.code_id : null
     });
 
     // 構造情報の更新
-    const structureResponse = await axios.patch(`${apiBaseUrlTree}structures/${editingStructure.id}/`, {
+    const structureResponse = await axios.patch(`${apiBaseUrl}/tree-structure/${editingStructure.id}/`, {
       relationship_type: editingStructure.relationship_type,
       quantity: editingStructure.quantity,
       is_master: !editingStructure.source_structure ? editingStructure.is_master : false
@@ -759,15 +826,41 @@ const handleNodeData = (data) => {
 
   // 親ノードに新しいノードを追加
   if (state.selectedNodeInfo.child) {
-    // 選択されたノードの下に追加するロジック
-    newNode.parent_id = state.selectedNodeInfo.child;
-    newNode.name = data.name;
-    newNode.code_id = data.id;
-    newNode.node_type = 'code';
+    // データが null や undefined でないことを確認
+    if (data && data.id) {
+      // 選択されたノードの下に追加するロジック
+      newNode.parent_id = state.selectedNodeInfo.child;
+      newNode.name = data.name;
+      newNode.code_id = data.id;
+      newNode.node_type = 'code';
 
-    // 追加ダイアログを表示
-    addNodeDialog.value = true;
+      // 追加ダイアログを表示
+      addNodeDialog.value = true;
+    } else {
+      console.error("Invalid node data received:", data);
+      // ユーザーにエラーを通知するロジックを追加できます
+      // 例: errorMessage.value = 'ノードデータが不正です';
+    }
   }
+};
+
+// ノード追加ダイアログを表示
+const showAddNodeDialog = () => {
+  // フォームをリセット
+  newNode.parent_id = selectedNode.value ? selectedNode.value.id : '';
+  newNode.node_type = 'code';
+  newNode.name = '';
+  newNode.description = '';
+  newNode.code_id = null;
+  newNode.relationship_type = 'assembly';
+  newNode.quantity = 1;
+  newNode.is_master = false;
+
+  // フォームのバリデーションをリセット
+  if (addNodeForm.value) addNodeForm.value.resetValidation();
+
+  // ダイアログを表示
+  addNodeDialog.value = true;
 };
 
 // プレフィックスリストからデータを受け取る
@@ -816,7 +909,26 @@ const handleGlobalClick = (event) => {
 
 // 初期化関数
 const initialize = async () => {
-  await fetchTreeData();
+  try {
+    // ローディング開始
+    isLoading.value = true;
+    state.loading = true;
+
+    // ツリーデータを取得
+    await fetchTreeData();
+
+    // 他の初期化処理があれば追加
+    await fetchAvailableCodes();
+    await fetchAvailableTrees();
+
+  } catch (error) {
+    console.error('初期化エラー:', error);
+    errorMessage.value = 'システムの初期化に失敗しました';
+  } finally {
+    // 必ずローディングを終了
+    isLoading.value = false;
+    state.loading = false;
+  }
 };
 
 // コンポーネントのマウント時に初期化
@@ -827,6 +939,9 @@ onMounted(async () => {
     document.addEventListener('click', handleGlobalClick);
   } catch (error) {
     console.error('Failed to initialize tree editor:', error);
+    // エラー時もローディングを終了
+    isLoading.value = false;
+    state.loading = false;
   }
 });
 
