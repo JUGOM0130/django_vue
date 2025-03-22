@@ -16,4 +16,7 @@ testvue
 *.sqlite3
 
 
-.vite/**
+# vite関連
+.vite/
+dist/
+dist-ssr/
