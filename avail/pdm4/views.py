@@ -753,16 +753,23 @@ class TreeViewSet(viewsets.ModelViewSet):
                 # 再帰的に子ノードの処理を続行
                 self._share_child_structures(child, new_child, active_version)
 
+    # views.pyのbulk_updateメソッド(またはsimilar name)の修正案
     @action(detail=True, methods=['post'])
     def bulk_update(self, request, pk=None):
         """
-        ツリー構造を一括で更新する
+        ツリー構造を一括で更新する - 重複防止と堅牢な処理
         """
+        # ロガーの設定
+        import logging
+        logger = logging.getLogger(__name__)
+
         tree = self.get_object()
         
         # リクエストからデータ取得
         structures_data = request.data.get('structures', [])
-        
+        print(f"Bulk update for tree {tree.id}: {len(structures_data)} structures")
+        print(f"Structures data: {structures_data}")
+
         if not structures_data:
             return Response(
                 {
@@ -771,7 +778,63 @@ class TreeViewSet(viewsets.ModelViewSet):
                 },
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
+        # 循環参照チェック関数
+        def check_circular_reference(parent_id, node_id, processed_nodes):
+            if parent_id == node_id:
+                return True  # 循環参照あり
+            
+            if parent_id in processed_nodes:
+                parent_node = processed_nodes[parent_id]
+                return check_circular_reference(parent_node['parent_id'], node_id, processed_nodes)
+            
+            return False  # 循環参照なし
+
+        # 循環参照のチェック
+        processed_nodes = {}
+        for item in structures_data:
+
+            print("処理中のitem:",item)
+            # 同名ノードの存在をチェック
+            existing_nodes = TreeNode.objects.filter(
+                name=item.get('name'),
+                node_type=item.get('node_type')
+            )
+            print(f"同名ノード: {list(existing_nodes.values('id', 'name'))}")
+            
+            # 既存の構造をチェック
+            existing_structures = TreeStructure.objects.filter(
+                tree_id=tree.id,
+                node__name=item.get('name'),
+                level=item.get('level')
+            )
+            print(f"同レベルの既存構造: {list(existing_structures.values('id', 'node__name', 'level'))}")
+
+            node_id = item.get('child')
+            parent_id = item.get('parent')
+            
+            # 自己参照のチェック
+            if node_id == parent_id:
+                return Response(
+                    {
+                        'success': False, 
+                        'message': f'ノードID {node_id} が自身を親に持っています。循環参照は許可されません。'
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # 循環参照のチェック
+            if parent_id and check_circular_reference(parent_id, node_id, processed_nodes):
+                return Response(
+                    {
+                        'success': False, 
+                        'message': f'ノードID {node_id} は循環参照の一部です。これは許可されません。'
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            processed_nodes[node_id] = {'parent_id': parent_id}
+
         try:
             with transaction.atomic():
                 # 現在のバージョンを取得または作成
@@ -790,33 +853,60 @@ class TreeViewSet(viewsets.ModelViewSet):
                         effective_date=timezone.now()
                     )
                 
-                # 変更ログを記録 - significance_levelを1に下げて通知が発生しないようにする
+                # 変更ログを記録
                 changes_log = TreeChangeLog.objects.create(
                     tree_version=active_version,
                     changed_by=request.user if request.user.is_authenticated else None,
                     change_type='update_metadata',
                     description=f"ツリー '{tree.name}' の構造を一括更新しました。",
-                    significance_level=1,  # 通常 (2から1に変更)
+                    significance_level=1,
                     new_data={
                         'structure_count': len(structures_data)
                     }
                 )
                 
-                # 既存のノードマップを作成（効率化のため）
+                # 既存のノードとその構造を効率的に取得
                 existing_nodes = TreeNode.objects.filter(
                     structures__tree=tree
                 ).distinct()
                 node_map = {node.id: node for node in existing_nodes}
                 
-                # 既存の構造マップを作成
+                # 既存の構造を詳細にマッピング
                 existing_structures = TreeStructure.objects.filter(tree=tree)
                 structure_map = {}
                 for structure in existing_structures:
-                    if structure.parent:
-                        key = f"{structure.parent.node.id}-{structure.node.id}"
-                    else:
-                        key = f"root-{structure.node.id}"
+                    key = (
+                        structure.parent.id if structure.parent else None, 
+                        structure.node.id, 
+                        structure.level
+                    )
                     structure_map[key] = structure
+                
+                # ルートノードの確認と作成
+                root_node = TreeNode.objects.filter(
+                    node_type='root',
+                    structures__tree=tree,
+                    structures__parent__isnull=True
+                ).first()
+                
+                if not root_node:
+                    root_node = TreeNode.objects.create(
+                        name=f"{tree.name}_ROOT",
+                        description=f"ツリー「{tree.name}」のルートノード",
+                        node_type='root',
+                        status='active'
+                    )
+                    
+                    root_structure = TreeStructure.objects.create(
+                        tree=tree,
+                        node=root_node,
+                        parent=None,
+                        level=0,
+                        path=str(root_node.id),
+                        is_master=True
+                    )
+                    node_map[root_node.id] = root_node
+                    structure_map[(None, root_node.id, 0)] = root_structure
                 
                 # 各構造を処理
                 updated_count = 0
@@ -832,51 +922,60 @@ class TreeViewSet(viewsets.ModelViewSet):
                     quantity = item.get('quantity', 1.0)
                     is_master = item.get('is_master', False)
                     
+                    # ROOTノードとレベル0は処理をスキップ
+                    if node_type == 'root' or level == 0:
+                        continue
+                    
                     if not child_id or not name:
                         continue  # 必須フィールドが欠けている場合はスキップ
                     
                     # ノードの取得または作成
-                    node = node_map.get(child_id)
-                    if not node:
-                        # 新しいノードを作成
-                        node = TreeNode.objects.create(
-                            name=name,
-                            description='',
-                            node_type=node_type,
-                            status='active'
-                        )
+                    node, node_created = TreeNode.objects.get_or_create(
+                        id=child_id,
+                        defaults={
+                            'name': name,
+                            'description': '',
+                            'node_type': node_type,
+                            'status': 'active'
+                        }
+                    )
+                    
+                    if node_created:
                         node_map[node.id] = node
-                        
-                    # 親構造を取得
+                    
+                    # 親構造の取得
                     parent_structure = None
                     if parent_id:
                         parent_node = node_map.get(parent_id)
                         if parent_node:
-                            # 親ノードに関連する構造を検索
                             for structure in existing_structures:
                                 if structure.node.id == parent_node.id:
                                     parent_structure = structure
                                     break
                     else:
                         # ルートノードを親とする
-                        parent_structure = existing_structures.filter(level=0).first()
+                        for structure in existing_structures:
+                            if structure.level == 0:
+                                parent_structure = structure
+                                break
                     
                     if not parent_structure and level > 1:
-                        # 親が見つからないのに階層が1より大きい場合はスキップ
                         continue
                     
-                    # 構造の構築キーを作成
-                    structure_key = f"root-{node.id}" if not parent_structure else f"{parent_structure.node.id}-{node.id}"
+                    # 構造の重複チェックと作成/更新
+                    structure_key = (
+                        parent_structure.id if parent_structure else None, 
+                        node.id, 
+                        level
+                    )
                     
-                    # 構造を取得または作成
-                    structure = structure_map.get(structure_key)
-                    if structure:
+                    existing_structure = structure_map.get(structure_key)
+                    if existing_structure:
                         # 既存の構造を更新
-                        structure.level = level
-                        structure.relationship_type = relationship_type
-                        structure.quantity = quantity
-                        structure.is_master = is_master
-                        structure.save()
+                        existing_structure.relationship_type = relationship_type
+                        existing_structure.quantity = quantity
+                        existing_structure.is_master = is_master
+                        existing_structure.save()
                         updated_count += 1
                     else:
                         # 新しい構造を作成
@@ -896,11 +995,8 @@ class TreeViewSet(viewsets.ModelViewSet):
                         structure_map[structure_key] = structure
                         created_count += 1
                 
-                # 変更ログを直接更新し、save()を呼び出さないようにする
-                # または、new_dataフィールドを使わずに別のフィールドに情報を保存
+                # 変更ログの説明を更新
                 changes_log.description += f" 更新: {updated_count}, 作成: {created_count}"
-                
-                # save()を呼び出す代わりに、QuerySetのupdateメソッドを使用
                 TreeChangeLog.objects.filter(id=changes_log.id).update(
                     description=changes_log.description
                 )
@@ -920,6 +1016,7 @@ class TreeViewSet(viewsets.ModelViewSet):
                 )
                     
         except Exception as e:
+            logger.error(f"Bulk update error: {str(e)}")
             return Response(
                 {
                     'success': False,
@@ -927,41 +1024,43 @@ class TreeViewSet(viewsets.ModelViewSet):
                 }, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-    
-    def save(self, *args, **kwargs):
-        """ツリー保存時に自動的にルートノードを作成"""
-        is_new = self.pk is None  # 新規作成かチェック
-        
-        with transaction.atomic():
-            # 1. まずTreeを保存
-            super().save(*args, **kwargs)
+
+
+
+        def save(self, *args, **kwargs):
+            """ツリー保存時に自動的にルートノードを作成"""
+            is_new = self.pk is None  # 新規作成かチェック
             
-            # 2. 新規作成時のみ、ルートノードとツリー構造を作成
-            if is_new:
-                # 既存のルートノードがないことを確認
-                existing_root = TreeNode.objects.filter(
-                    node_type='root', 
-                    tree_nodes__tree=self
-                ).first()
+            with transaction.atomic():
+                # 1. まずTreeを保存
+                super().save(*args, **kwargs)
                 
-                if not existing_root:
-                    # ルートノードを作成
-                    root_node = TreeNode.objects.create(
-                        name=f"{self.name}_ROOT",
-                        description=f"ツリー「{self.name}」のルートノード",
-                        node_type='root',
-                        status='active'
-                    )
+                # 2. 新規作成時のみ、ルートノードとツリー構造を作成
+                if is_new:
+                    # 既存のルートノードがないことを確認
+                    existing_root = TreeNode.objects.filter(
+                        node_type='root', 
+                        tree_nodes__tree=self
+                    ).first()
                     
-                    # ツリー構造を作成
-                    TreeStructure.objects.create(
-                        tree=self,
-                        node=root_node,
-                        parent=None,
-                        level=0,
-                        path=str(root_node.id),
-                        is_master=True  # ルートノードはマスター
-                    )
+                    if not existing_root:
+                        # ルートノードを作成
+                        root_node = TreeNode.objects.create(
+                            name=f"{self.name}_ROOT",
+                            description=f"ツリー「{self.name}」のルートノード",
+                            node_type='root',
+                            status='active'
+                        )
+                        
+                        # ツリー構造を作成
+                        TreeStructure.objects.create(
+                            tree=self,
+                            node=root_node,
+                            parent=None,
+                            level=0,
+                            path=str(root_node.id),
+                            is_master=True  # ルートノードはマスター
+                        )
 
 class TreeStructureViewSet(viewsets.ModelViewSet):
     """TreeStructureの作成・読取・更新・削除を行うViewSet"""
