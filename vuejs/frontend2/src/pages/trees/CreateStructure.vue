@@ -12,6 +12,8 @@ const router = useRouter();
 // APIのベースURL
 const apiBaseUrlCode = import.meta.env.VITE_API_BASE_URL + "/code";
 const apiBaseUrlTree = import.meta.env.VITE_API_BASE_URL + "/tree";
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
+
 
 // 状態管理
 const tree = ref(null);
@@ -98,8 +100,16 @@ const state = reactive({
   isTest: false, // デバッグモード
   isModalOpen: {
     nodeList: false,
-    prefixList: false
+    prefixList: false  // Prefixリストモーダル用
   }
+});
+
+// 既に定義されている snackbar 変数の後に追加
+const snackbar = ref({
+  show: false,
+  text: '',
+  color: 'success',
+  timeout: 3000
 });
 
 // その他のオプション
@@ -143,7 +153,8 @@ const canDeleteNode = computed(() => {
   return true;
 });
 
-// ツリーデータの取得
+
+// fetchTreeDataメソッドの修正
 const fetchTreeData = async () => {
   const treeId = route.query.id;
   if (!treeId) {
@@ -153,36 +164,143 @@ const fetchTreeData = async () => {
   }
 
   try {
-    // ツリー基本情報を取得
-    const treeResponse = await axios.get(`${apiBaseUrlTree}/${treeId}`);
-    tree.value = treeResponse.data.data;
+    // ローディング開始
+    isLoading.value = true;
+
+    // まずツリー自体の情報を取得
+    try {
+      const treeResponse = await axios.get(`${apiBaseUrlTree}/${treeId}/`);
+
+      // APIレスポンスの形式によって調整が必要
+      // データがdataプロパティにネストされているか確認
+      if (treeResponse.data && treeResponse.data.data) {
+        tree.value = treeResponse.data.data;
+      } else {
+        tree.value = treeResponse.data;
+      }
+
+      console.log('Fetched tree data:', tree.value);
+
+      // tree.valueがオブジェクトでidプロパティを持っていることを確認
+      if (!tree.value || typeof tree.value !== 'object' || !tree.value.id) {
+        throw new Error('取得したツリーデータが不正です');
+      }
+    } catch (error) {
+      console.error('ツリー基本情報の取得に失敗しました:', error);
+      errorMessage.value = 'ツリー基本情報の取得に失敗しました';
+      isLoading.value = false;
+      return;
+    }
 
     // ツリー構造を取得
     const structureResponse = await axios.get(`${apiBaseUrlTree}/${treeId}/structure/`);
-    treeNodes.value = buildTreeStructure(structureResponse.data.data);
+    console.log('Structure response:', structureResponse.data);
 
-    // organizedTreeを構築
-    buildOrganizedTree();
+    // レスポンスからデータを抽出（APIの形式に応じて調整）
+    let structureData;
+    if (structureResponse.data && Array.isArray(structureResponse.data.data)) {
+      structureData = structureResponse.data.data;
+    } else if (Array.isArray(structureResponse.data)) {
+      structureData = structureResponse.data;
+    } else {
+      throw new Error('ツリー構造データの形式が不正です');
+    }
 
-    // 利用可能なコードのリストを取得
-    await fetchAvailableCodes();
+    // ノード情報を並行して取得
+    if (structureData.length === 0) {
+      // 構造が空の場合
+      treeNodes.value = [];
+      organizedTree.value = [];
+    } else {
+      const nodeIds = structureData.map(item => item.node);
+      const nodeDetailsPromises = nodeIds.map(nodeId =>
+        axios.get(`${apiBaseUrl}/tree-node/${nodeId}/`)
+      );
 
-    // 利用可能なツリーのリストを取得
-    await fetchAvailableTrees();
+      const nodeDetailsResponses = await Promise.all(nodeDetailsPromises);
+      const nodeDetailsMap = new Map(
+        nodeDetailsResponses.map(response => {
+          // レスポンスの形式によって調整
+          const data = response.data.data || response.data;
+          return [data.id, data];
+        })
+      );
 
-    state.isInitialized = true;
+      // ツリー構造を構築
+      treeNodes.value = buildTreeStructure(structureData, nodeDetailsMap);
+
+      // organizedTreeを構築
+      buildOrganizedTree();
+    }
+
+    console.log('Processed Tree Nodes:', treeNodes.value);
+    console.log('Organized Tree:', organizedTree.value);
+
   } catch (error) {
     console.error('ツリーデータの取得に失敗しました:', error);
-    errorMessage.value = error.response?.data?.message || 'ツリーデータの取得に失敗しました';
-    state.errorMessage = errorMessage.value;
+    errorMessage.value = error.response?.data?.message || error.message || 'ツリーデータの取得に失敗しました';
   } finally {
+    // 状態の更新
+    state.isInitialized = true;
     isLoading.value = false;
-    state.loading = false;
   }
 };
 
-// organizedTreeを構築する関数
+const buildTreeStructure = (data, nodeDetailsMap) => {
+  console.log('Building tree structure from:', data);
+
+  const nodesMap = new Map();
+
+  // まず全ノードをマップに登録
+  data.forEach(item => {
+    const nodeDetails = nodeDetailsMap.get(item.node) || {};
+
+    const node = {
+      id: item.id,
+      node_id: item.node,
+      name: nodeDetails.name || 'Unknown',
+      node_type: nodeDetails.node_type || 'unknown',
+      description: nodeDetails.description || '',
+      code: nodeDetails.code,
+      level: item.level,
+      path: item.path,
+      relationship_type: item.relationship_type || 'assembly',
+      quantity: parseFloat(item.quantity) || 1,
+      is_master: item.is_master || false,
+      parent_id: item.parent,
+      source_structure: item.source_structure,
+      structure_id: item.id,
+      children: []
+    };
+
+    nodesMap.set(item.id, node);
+  });
+
+  // 親子関係を構築
+  const rootNodes = [];
+  data.forEach(item => {
+    const node = nodesMap.get(item.id);
+
+    if (item.parent) {
+      const parentNode = nodesMap.get(item.parent);
+      if (parentNode) {
+        // 子ノードを親ノードのchildrenに追加
+        parentNode.children.push(node);
+      }
+    } else {
+      rootNodes.push(node);
+    }
+  });
+
+  console.log('Root Nodes:', rootNodes);
+  return rootNodes;
+};
+
+
+
+// buildOrganizedTreeメソッドを修正
 const buildOrganizedTree = () => {
+  console.log('ツリーデータ:', treeNodes.value);
   if (!treeNodes.value || treeNodes.value.length === 0) {
     organizedTree.value = [];
     return;
@@ -196,9 +314,9 @@ const buildOrganizedTree = () => {
       uniqueKey: `${parent}-${node.id}-${level}`,
       parent: parent,
       child: node.id,
-      name: node.name || 'unnamed', // nameがundefinedの場合のデフォルト値
+      name: node.name || 'unnamed',
       level: level,
-      node_type: node.node_type || 'unknown', // node_typeがundefinedの場合のデフォルト値
+      node_type: node.node_type || 'unknown',
       relationship_type: node.relationship_type || 'assembly',
       quantity: node.quantity || 1,
       is_master: node.is_master || false,
@@ -222,46 +340,7 @@ const buildOrganizedTree = () => {
   organizedTree.value = result;
 };
 
-// ツリー構造データを整形
-const buildTreeStructure = (data) => {
-  const nodesMap = new Map();
 
-  // まず全ノードをマップに登録
-  data.forEach(item => {
-    nodesMap.set(item.id, {
-      id: item.id,
-      name: item.node.name || 'unnamed', // nameがundefinedの場合のデフォルト値
-      node_type: item.node.node_type || 'unknown', // node_typeがundefinedの場合のデフォルト値
-      description: item.node.description || '',
-      code: item.node.code,
-      level: item.level,
-      path: item.path,
-      relationship_type: item.relationship_type || 'assembly',
-      quantity: item.quantity || 1,
-      is_master: item.is_master || false,
-      source_structure: item.source_structure,
-      structure_id: item.id,
-      is_shared: !!item.source_structure,
-      children: []
-    });
-  });
-
-  // 親子関係を構築
-  const rootNodes = [];
-  data.forEach(item => {
-    const node = nodesMap.get(item.id);
-    if (item.parent) {
-      const parentNode = nodesMap.get(item.parent.id);
-      if (parentNode) {
-        parentNode.children.push(node);
-      }
-    } else {
-      rootNodes.push(node);
-    }
-  });
-
-  return rootNodes;
-};
 
 // ノードを再帰的に平坦化して選択肢用のリストを作成
 const flattenNodes = (nodes, result = []) => {
@@ -442,12 +521,94 @@ const goBack = () => {
   router.push({ name: 'tree_list' });
 };
 
-// ノード追加ダイアログを表示
+
+
+// ノードを追加
+// ノードを追加
+const addNode = async () => {
+  if (!isAddNodeFormValid.value) return;
+
+  // ツリー情報の再確認
+  if (!tree.value || !tree.value.id) {
+    errorMessage.value = 'ツリー情報が正しく設定されていません。ページを再読み込みしてください。';
+    console.error('Tree information is not set when trying to add node:', tree.value);
+    return;
+  }
+
+  // 親ノードIDの確認
+  if (!newNode.parent_id) {
+    errorMessage.value = '親ノードが選択されていません';
+    return;
+  }
+
+  isAdding.value = true;
+
+  try {
+    console.log('Adding node to tree:', tree.value.id);
+    console.log('Request data:', {
+      parent_id: newNode.parent_id,
+      name: newNode.name,
+      description: newNode.description,
+      node_type: newNode.node_type,
+      code_id: newNode.node_type === 'code' ? newNode.code_id : null,
+      relationship_type: newNode.relationship_type,
+      quantity: newNode.quantity,
+      is_master: newNode.is_master
+    });
+
+    // code_idが指定されていない場合でもコード形式の名前を使用
+    const requestData = {
+      parent_id: newNode.parent_id,
+      name: newNode.name,
+      description: newNode.description,
+      node_type: newNode.node_type,
+      code_id: newNode.node_type === 'code' ? newNode.code_id : null,
+      relationship_type: newNode.relationship_type,
+      quantity: newNode.quantity,
+      is_master: newNode.is_master
+    };
+
+    const response = await axios.post(`${apiBaseUrlTree}/${tree.value.id}/add_node/`, requestData);
+
+    console.log('Add node response:', response.data);
+
+    // addNode 関数内で
+    if (response.data.success) {
+      // ダイアログを閉じる
+      addNodeDialog.value = false;
+
+      // ツリーデータを再取得
+      await refreshTree();
+
+      // 成功メッセージ表示
+      snackbar.value = {
+        show: true,
+        text: `ノード「${newNode.name}」を追加しました`,
+        color: 'success',
+        timeout: 3000
+      };
+    }
+  } catch (error) {
+    console.error('ノード追加エラー:', error);
+    errorMessage.value = error.response?.data?.message || 'ノードの追加中にエラーが発生しました';
+  } finally {
+    isAdding.value = false;
+  }
+};
+
+// ノード追加ダイアログを表示（手動入力の場合）
 const showAddNodeDialog = () => {
+  // ツリー情報が設定されているか確認
+  if (!tree.value || !tree.value.id) {
+    errorMessage.value = 'ツリー情報が正しく設定されていません。ページを再読み込みしてください。';
+    console.error('Tree information is not set when showing add node dialog:', tree.value);
+    return;
+  }
+
   // フォームをリセット
   newNode.parent_id = selectedNode.value ? selectedNode.value.id : '';
   newNode.node_type = 'code';
-  newNode.name = '';
+  newNode.name = ''; // 空に設定（Prefixから採番されるべき）
   newNode.description = '';
   newNode.code_id = null;
   newNode.relationship_type = 'assembly';
@@ -459,44 +620,6 @@ const showAddNodeDialog = () => {
 
   // ダイアログを表示
   addNodeDialog.value = true;
-};
-
-// ノードを追加
-const addNode = async () => {
-  if (!isAddNodeFormValid.value) return;
-
-  isAdding.value = true;
-
-  try {
-    const response = await axios.post(`${apiBaseUrlTree}/${tree.value.id}/add_node/`, {
-      parent_id: newNode.parent_id,
-      name: newNode.name,
-      description: newNode.description,
-      node_type: newNode.node_type,
-      code_id: newNode.node_type === 'code' ? newNode.code_id : null,
-      relationship_type: newNode.relationship_type,
-      quantity: newNode.quantity,
-      is_master: newNode.is_master
-    });
-
-    if (response.data.success) {
-      // ダイアログを閉じる
-      addNodeDialog.value = false;
-
-      // ツリーデータを再取得
-      await refreshTree();
-
-      // 成功メッセージ表示
-      // Vuetifyのスナックバーなどを使用する場合はここで表示
-    } else {
-      errorMessage.value = response.data.message || 'ノードの追加に失敗しました';
-    }
-  } catch (error) {
-    console.error('ノード追加エラー:', error);
-    errorMessage.value = error.response?.data?.message || 'ノードの追加中にエラーが発生しました';
-  } finally {
-    isAdding.value = false;
-  }
 };
 
 // ノード編集ダイアログを表示
@@ -531,14 +654,14 @@ const updateNode = async () => {
 
   try {
     // ノード情報の更新
-    const nodeResponse = await axios.patch(`${apiBaseUrlTree}nodes/${editingNode.id}/`, {
+    const nodeResponse = await axios.patch(`${apiBaseUrl}/tree-node/${editingNode.id}/`, {
       name: editingNode.name,
       description: editingNode.description,
       code_id: editingNode.node_type === 'code' && editingNode.code_id ? editingNode.code_id : null
     });
 
     // 構造情報の更新
-    const structureResponse = await axios.patch(`${apiBaseUrlTree}structures/${editingStructure.id}/`, {
+    const structureResponse = await axios.patch(`${apiBaseUrl}/tree-structure/${editingStructure.id}/`, {
       relationship_type: editingStructure.relationship_type,
       quantity: editingStructure.quantity,
       is_master: !editingStructure.source_structure ? editingStructure.is_master : false
@@ -702,7 +825,7 @@ const contextMenuOperations = {
 
     // 選択したノード情報を記録
     state.selectedNodeInfo = {
-      child: item.child,  // これがundefinedになっていないか確認
+      child: item.child,
       level: item.level,
       parent: item.parent
     };
@@ -721,7 +844,7 @@ const contextMenuOperations = {
   }
 };
 
-// モーダル操作
+// モーダル操作に新しい関数を追加
 const modalOperations = {
   openNodeList: () => {
     state.isModalOpen.nodeList = true;
@@ -738,6 +861,8 @@ const modalOperations = {
     state.isModalOpen.prefixList = false;
   }
 };
+
+
 
 // IDからノードを検索
 const findNodeById = (nodes, id) => {
@@ -759,22 +884,46 @@ const handleNodeData = (data) => {
 
   // 親ノードに新しいノードを追加
   if (state.selectedNodeInfo.child) {
-    // 選択されたノードの下に追加するロジック
-    newNode.parent_id = state.selectedNodeInfo.child;
-    newNode.name = data.name;
-    newNode.code_id = data.id;
-    newNode.node_type = 'code';
+    // データが null や undefined でないことを確認
+    if (data && data.id) {
+      // 選択されたノードの下に追加するロジック
+      newNode.parent_id = state.selectedNodeInfo.child;
+      newNode.name = data.name;
+      newNode.code_id = data.id;
+      newNode.node_type = 'code';
 
-    // 追加ダイアログを表示
-    addNodeDialog.value = true;
+      // 追加ダイアログを表示
+      addNodeDialog.value = true;
+    } else {
+      console.error("Invalid node data received:", data);
+      // ユーザーにエラーを通知するロジックを追加できます
+      // 例: errorMessage.value = 'ノードデータが不正です';
+    }
   }
 };
 
-// プレフィックスリストからデータを受け取る
+
+// Prefixリストからデータを受け取る処理を追加
 const handlePrefixData = (data) => {
   console.log("Received prefix data:", data);
-  // ここでプレフィックスデータを処理
   modalOperations.closePrefixList();
+
+  // 選択されたノードがあるか確認
+  if (state.selectedNodeInfo.child) {
+    // 採番されたコードを使用してノード追加ダイアログを表示
+    // Prefixから取得したコードをセット
+    newNode.parent_id = state.selectedNodeInfo.child;
+    newNode.name = data.code; // 採番されたコード
+    newNode.description = data.name; // 入力されたコード名を説明に設定
+    newNode.code_id = data.id; // コードIDをセット（あれば）
+    newNode.node_type = 'code';
+
+    // 採番済みのコードの場合はcode_id、そうでない場合はnull
+    newNode.code_id = data.temp_code ? null : data.id;
+
+    // ダイアログを表示
+    addNodeDialog.value = true;
+  }
 };
 
 // ツリーの一括作成
@@ -815,18 +964,93 @@ const handleGlobalClick = (event) => {
 };
 
 // 初期化関数
+// 初期化時にPrefixListLightVersionコンポーネントを確認
 const initialize = async () => {
-  await fetchTreeData();
+  try {
+    // ローディング開始
+    isLoading.value = true;
+    state.loading = true;
+
+    // URLからツリーIDが指定されているか確認
+    const treeId = route.query.id;
+    if (!treeId) {
+      errorMessage.value = 'ツリーIDが指定されていません。ツリー一覧に戻ってください。';
+      console.error('No tree ID specified in the URL');
+      return;
+    }
+
+    console.log('Initializing with tree ID:', treeId);
+
+    // ツリーデータを取得
+    await fetchTreeData();
+
+    // ツリー情報が正常に取得できたか確認
+    if (!tree.value || !tree.value.id) {
+      errorMessage.value = 'ツリー情報の取得に失敗しました。';
+      console.error('Failed to fetch tree information');
+      return;
+    }
+
+    // 他の初期化処理
+    await Promise.all([
+      fetchAvailableCodes(),
+      fetchAvailableTrees()
+    ]);
+
+    console.log('Initialization complete');
+    state.isInitialized = true;
+
+  } catch (error) {
+    console.error('初期化エラー:', error);
+    errorMessage.value = 'システムの初期化に失敗しました: ' + (error.message || '不明なエラー');
+  } finally {
+    // 必ずローディングを終了
+    isLoading.value = false;
+    state.loading = false;
+  }
+};
+
+// Prefixからコードを発番するショートカット（コンテキストメニューではなく直接呼び出す場合）
+const generateCodeFromPrefix = () => {
+  // 選択されたノードが親になる
+  if (selectedNode.value) {
+    state.selectedNodeInfo.child = selectedNode.value.id;
+    modalOperations.openPrefixList();
+  } else {
+    errorMessage.value = '先にノードを選択してください';
+  }
+};
+
+// コード生成後の成功メッセージ表示とツリーの再読み込み
+const handleCodeGenerationSuccess = async (generatedCode) => {
+  try {
+    // 成功メッセージを表示
+    showMessage(`コード「${generatedCode}」が正常に生成され、ノードに追加されました`, 'success');
+
+    // ツリーデータを再取得
+    await refreshTree();
+  } catch (error) {
+    console.error('ツリー更新エラー:', error);
+    errorMessage.value = 'ツリーの更新中にエラーが発生しました';
+  }
 };
 
 // コンポーネントのマウント時に初期化
 onMounted(async () => {
   try {
+    console.log('Component mounted, starting initialization');
     await initialize();
+
     // グローバルクリックイベントリスナーを追加
     document.addEventListener('click', handleGlobalClick);
+
+    console.log('Initialization complete, tree:', tree.value);
   } catch (error) {
     console.error('Failed to initialize tree editor:', error);
+    // エラー時もローディングを終了
+    isLoading.value = false;
+    state.loading = false;
+    errorMessage.value = '初期化中にエラーが発生しました: ' + (error.message || '不明なエラー');
   }
 });
 
@@ -834,6 +1058,9 @@ onMounted(async () => {
 onUnmounted(() => {
   document.removeEventListener('click', handleGlobalClick);
 });
+
+
+
 </script>
 
 
@@ -848,7 +1075,7 @@ onUnmounted(() => {
 
       <v-row>
         <v-col>
-          <v-btn variant="outlined" color="primary" class="mb-5" @click="bulkCreateTree">登録</v-btn>
+          <v-btn variant="outlined" color="primary" class="mb-5" @click="bulkCreateTree" :disabled="true">登録</v-btn>
         </v-col>
         <v-col>
           <!-- 右クリックした際のオブジェクトの値 -->
@@ -882,10 +1109,10 @@ onUnmounted(() => {
         left: `${menuPosition.x}px`,
         zIndex: 1000
       }" @click.stop>
-        <ul><!--
+        <ul>
+          <!-- Prefixリストを開くオプションを追加 -->
           <li @click="modalOperations.openPrefixList">コード発番</li>
           <li @click="modalOperations.openNodeList">登録済みノード一覧</li>
-          -->
           <li @click="showAddNodeDialog">新規ノード作成</li>
           <li v-if="selectedNode && canEditNode" @click="showEditNodeDialog">ノード編集</li>
           <li v-if="selectedNode && canDeleteNode" @click="confirmDeleteNode" class="danger">ノード削除</li>
@@ -916,9 +1143,16 @@ onUnmounted(() => {
       </v-data-table>
 
       <!-- ノード追加モーダル -->
+      <!-- ノード追加モーダル -->
       <v-dialog v-model="addNodeDialog" width="500px">
         <v-card>
-          <v-card-title>新規ノード追加</v-card-title>
+          <v-card-title class="d-flex justify-space-between align-center">
+            新規ノード追加
+            <v-btn v-if="newNode.name" icon="mdi-refresh" size="small" @click="modalOperations.openPrefixList"
+              variant="text" color="primary" class="ml-2">
+              <v-tooltip activator="parent" location="bottom">別のコードを発番</v-tooltip>
+            </v-btn>
+          </v-card-title>
           <v-card-text>
             <v-form ref="addNodeForm" v-model="isAddNodeFormValid">
               <v-select v-model="newNode.parent_id" label="親ノード*" :items="nodeSelectOptions" item-title="name"
@@ -929,15 +1163,34 @@ onUnmounted(() => {
                 item-value="value" variant="outlined" density="comfortable" :rules="[v => !!v || 'ノードタイプは必須です']"
                 class="mb-3"></v-select>
 
-              <v-text-field v-model="newNode.name" label="ノード名*" variant="outlined" density="comfortable"
-                :rules="[v => !!v || 'ノード名は必須です']" class="mb-3"></v-text-field>
+              <!-- コード部分 -->
+              <v-text-field v-model="newNode.name" label="コード*" variant="outlined" density="comfortable"
+                :rules="[v => !!v || 'コードは必須です']" hint="例: AAA-A0001Z000" class="mb-3" :readonly="!!newNode.name"
+                append-inner-icon="mdi-barcode-scan" @click:append-inner="modalOperations.openPrefixList">
+                <template v-slot:append-inner v-if="!newNode.name">
+                  <v-btn icon="mdi-barcode-scan" variant="text" size="small" color="primary"
+                    @click.stop="modalOperations.openPrefixList">
+                    <v-tooltip activator="parent" location="bottom">コードを発番</v-tooltip>
+                  </v-btn>
+                </template>
+              </v-text-field>
+
+              <v-alert v-if="!newNode.name" type="info" density="compact" variant="outlined" class="mb-3">
+                「コード発番」ボタンをクリックして、Prefixからコードを採番できます。
+              </v-alert>
 
               <v-textarea v-model="newNode.description" label="説明" variant="outlined" density="comfortable" rows="3"
-                auto-grow class="mb-3"></v-textarea>
+                auto-grow hint="この部品の説明を入力してください" class="mb-3"></v-textarea>
 
-              <v-select v-if="newNode.node_type === 'code'" v-model="newNode.code_id" label="関連コード" :items="codeOptions"
-                item-title="display" item-value="id" variant="outlined" density="comfortable" class="mb-3"
-                :rules="[v => !!v || '関連コードは必須です']">
+              <v-select v-if="newNode.node_type === 'code' && !newNode.name" v-model="newNode.code_id" label="関連コード"
+                :items="codeOptions" item-title="display" item-value="id" variant="outlined" density="comfortable"
+                class="mb-3" :rules="[v => !!v || '関連コードは必須です']">
+                <template v-slot:selection="{ item }">
+                  {{ item.raw.display }}
+                </template>
+                <template v-slot:item="{ item }">
+                  <v-list-item :title="item.raw.code" :subtitle="item.raw.name"></v-list-item>
+                </template>
               </v-select>
 
               <v-select v-model="newNode.relationship_type" label="関係タイプ" :items="relationshipTypeOptions"
@@ -946,7 +1199,8 @@ onUnmounted(() => {
               <v-text-field v-model.number="newNode.quantity" label="数量" type="number" min="0.001" step="0.001"
                 variant="outlined" density="comfortable" hint="デフォルト: 1.0" class="mb-3"></v-text-field>
 
-              <v-checkbox v-model="newNode.is_master" label="マスター構造として設定" color="primary" hide-details></v-checkbox>
+              <v-checkbox v-model="newNode.is_master" label="マスター構造として設定" color="primary" hint="他のツリーから共有可能にする場合はチェック"
+                hide-details></v-checkbox>
             </v-form>
           </v-card-text>
           <v-card-actions>
@@ -954,7 +1208,8 @@ onUnmounted(() => {
             <v-btn color="grey-darken-1" variant="text" @click="addNodeDialog = false" :disabled="isAdding">
               キャンセル
             </v-btn>
-            <v-btn color="primary" @click="addNode" :disabled="!isAddNodeFormValid || isAdding" :loading="isAdding">
+            <v-btn color="primary" @click="addNode" :disabled="!isAddNodeFormValid || isAdding || !newNode.name"
+              :loading="isAdding">
               追加
             </v-btn>
           </v-card-actions>
@@ -1049,18 +1304,27 @@ onUnmounted(() => {
       </v-dialog>
 
       <!-- PrefixListモーダル -->
-      <v-dialog v-model="state.isModalOpen.prefixList" width="auto">
+      <v-dialog v-model="state.isModalOpen.prefixList" width="600px">
         <v-card>
-          <v-card-title>
-            Prefix List
-            <v-btn icon="mdi-close" @click="modalOperations.closePrefixList" class="float-right" />
+          <v-card-title class="d-flex justify-space-between align-center">
+            コード発番
+            <v-btn icon="mdi-close" variant="text" @click="modalOperations.closePrefixList"
+              density="comfortable"></v-btn>
           </v-card-title>
           <v-card-text>
-            <PrefixListLightVersion @data-sent="handlePrefixData" />
+            <PrefixListLightVersion @data-sent="handlePrefixData" @close="modalOperations.closePrefixList" />
           </v-card-text>
         </v-card>
       </v-dialog>
     </template>
+
+    <!-- スナックバー通知 -->
+    <v-snackbar v-model="snackbar.show" :color="snackbar.color" :timeout="snackbar.timeout">
+      {{ snackbar.text }}
+      <template v-slot:actions>
+        <v-btn variant="text" icon="mdi-close" @click="snackbar.show = false"></v-btn>
+      </template>
+    </v-snackbar>
   </v-container>
 </template>
 
@@ -1197,5 +1461,92 @@ onUnmounted(() => {
 /* データテーブルの行をハイライト */
 .v-data-table .highlighted-row {
   background-color: rgba(33, 150, 243, 0.1);
+}
+
+/* コード入力フィールド用のスタイル */
+.code-input {
+  font-family: 'Roboto Mono', monospace;
+  letter-spacing: 0.5px;
+}
+
+.code-input.readonly {
+  background-color: #f5f5f5;
+  color: #1976d2;
+  font-weight: 500;
+}
+
+/* プレフィックス選択モーダル用のスタイル追加 */
+.prefix-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.prefix-item {
+  padding: 8px 16px;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.prefix-item:hover {
+  background-color: #f5f5f5;
+  transform: translateY(-2px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.prefix-item.selected {
+  border-color: #1976d2;
+  background-color: #e3f2fd;
+}
+
+.prefix-item .prefix-name {
+  font-weight: 500;
+}
+
+.prefix-item .prefix-type {
+  font-size: 12px;
+  color: #666;
+}
+
+/* 発番されたコード表示用のスタイル */
+.generated-code-display {
+  background-color: #f5f5f5;
+  padding: 16px;
+  border-radius: 4px;
+  margin-bottom: 16px;
+  text-align: center;
+  font-family: 'Roboto Mono', monospace;
+}
+
+.generated-code-display .code {
+  font-size: 18px;
+  font-weight: 500;
+  color: #1976d2;
+  letter-spacing: 1px;
+}
+
+.generated-code-display .hint {
+  font-size: 12px;
+  color: #666;
+  margin-top: 4px;
+}
+
+/* モーダルアクションボタンの配置 */
+.modal-actions {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 16px;
+}
+
+/* コンテキストメニューの改善 */
+.context-menu li .icon {
+  margin-right: 8px;
+}
+
+.context-menu li.prefix-option {
+  color: #1976d2;
 }
 </style>

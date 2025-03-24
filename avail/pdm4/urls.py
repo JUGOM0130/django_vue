@@ -13,7 +13,8 @@ from .views import (
     TreeStructureViewSet,
     TreeVersionViewSet,
     TreeCodeQuantityViewSet,
-    TreeChangeLogViewSet
+    TreeChangeLogViewSet,
+    TreeNodeViewSet
 )
 
 class APIRouter:
@@ -39,6 +40,7 @@ class APIRouter:
             'tree-version': TreeVersionViewSet,
             'tree-code-quantity': TreeCodeQuantityViewSet,
             'tree-change-log': TreeChangeLogViewSet,
+            'tree-node': TreeNodeViewSet
         }
 
         # エンドポイントの登録
