@@ -13,7 +13,10 @@ export default defineConfig({
     }
   },
   build: {
-    rollupOptions: {
+    outDir: '../../dist'
+    , assetsDir: 'assets'
+    , emptyOutDir: true
+    , rollupOptions: {
       input: {
         default: resolve(__dirname, 'index.html'),
         node: resolve(__dirname, 'src/pages/nodes/index.html'),
@@ -23,6 +26,6 @@ export default defineConfig({
   },
   server: {
     port: 3000
-    ,open: true
-  } 
+    , open: true
+  }
 })
