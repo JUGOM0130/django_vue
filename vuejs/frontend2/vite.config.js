@@ -29,6 +29,11 @@ export default defineConfig(({ command, mode }) => {
           default: resolve(__dirname, 'index.html'),
           node: resolve(__dirname, 'src/pages/nodes/index.html'),
           tree: resolve(__dirname, 'src/pages/trees/index.html')
+        },
+        output: {
+          assetFileNames: 'assets/[name][extname]',
+          chunkFileNames: 'assets/[name].js',
+          entryFileNames: 'assets/[name].js'
         }
       }
     },

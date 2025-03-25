@@ -1,0 +1,1 @@
+import{_ as o}from"./_plugin-vue_export-helper.js";import{d as t,e as r,o as n}from"./materialdesignicons.js";const s={};function a(c,e){return n(),t("div",null,e[0]||(e[0]=[r("h1",null,"About.vue",-1)]))}const f=o(s,[["render",a]]);export{f as default};
