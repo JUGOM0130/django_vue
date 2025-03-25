@@ -10,10 +10,11 @@ env/
 
 # vue
 testvue
-
+.env.prod
 
 # db
 *.sqlite3
 
 
 .vite/**
+
