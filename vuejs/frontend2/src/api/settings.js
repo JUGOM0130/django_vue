@@ -1,5 +1,6 @@
 import axios from "axios";
+const baseURL = import.meta.env.VITE_API_BASE_URL;
 
-axios.defaults.baseURL = "http://localhost:8000/api4";
+axios.defaults.baseURL = baseURL;
 
 export default axios;
