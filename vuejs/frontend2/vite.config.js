@@ -5,9 +5,10 @@ import { resolve } from 'path'
 
 // default exportを関数形式に変更
 export default defineConfig(({ command, mode }) => {
+
+
   // 環境変数を読み込む
   const env = loadEnv(mode, process.cwd(), '')
-
   // デバッグ用のログ出力
   console.log('Build Mode:', mode)
   console.log('Environment Variables:', env)
