@@ -1563,3 +1563,14 @@ class TreeChangeLog(BaseModel):
     def get_notification_message(self):
         """通知メッセージ"""
     
+    def get_stakeholders(self):
+        """関係者のリストを取得"""
+        stakeholders = []
+        try:
+            if self.tree_version and self.tree_version.tree:
+                tree = self.tree_version.tree
+                if hasattr(tree, 'created_by') and tree.created_by:
+                    stakeholders.append(tree.created_by)
+            return stakeholders
+        except Exception as e:
+            return []

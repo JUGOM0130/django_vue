@@ -358,6 +358,10 @@ class TreeViewSet(viewsets.ModelViewSet):
                 'node', 'parent'
             ).order_by('level', 'sequence')
             
+            for structure in structures:
+                # 各構造のノード情報を取得
+                print(f"\t構造ID: {structure.id},\t ノード名: {structure.node.name},\t 親ID: {structure.parent.id if structure.parent else 'なし'},\t レベル: {structure.level},\t パス: {structure.path}")
+
             # シリアライザを使ってレスポンスデータを整形
             serializer = TreeStructureSerializer(structures, many=True, context={'request': request})
             
@@ -1061,6 +1065,1067 @@ class TreeViewSet(viewsets.ModelViewSet):
                             path=str(root_node.id),
                             is_master=True  # ルートノードはマスター
                         )
+
+
+    
+    @action(detail=True, methods=['post'])
+    def add_existing_structure_shared(self, request, pk=None):
+        """
+        既存ノード構造を共有参照として追加するAPIエンドポイント
+        
+        エンドポイント: POST /api/trees/{tree_id}/add_existing_structure_shared/
+        
+        機能説明:
+        - 他のツリーから既存のノード構造を真の共有として追加
+        - 同じTreeNodeオブジェクトを複数のツリーで共有参照
+        - 元のツリーでの変更が全ての共有先に自動反映される
+        - 子ノードも含めて再帰的に共有可能
+        
+        リクエストパラメータ:
+        - source_tree_id (int, 必須): コピー元ツリーのID
+        - source_structure_id (int, 必須): コピー元構造のID
+        - parent_id (int, 必須): このツリーでの親構造ID
+        - include_children (bool, 任意): 子ノードも含めるか (デフォルト: True)
+        - relationship_type (str, 任意): 関係タイプ (デフォルト: 'assembly')
+                                     選択肢: 'assembly', 'reference', 'option', 'spare', 'alternate', 'phantom'
+        - quantity (float, 任意): 数量 (デフォルト: 1.0)
+        - is_master (bool, 任意): マスター構造かどうか (デフォルト: False)
+        
+        レスポンスパラメータ:
+        - success (bool): 処理の成功/失敗
+        - message (str): 処理結果メッセージ
+        - data (object): 処理結果データ
+          - shared_count (int): 共有された構造の数
+          - is_true_sharing (bool): 真の共有であることを示すフラグ
+          - source_tree (object): ソースツリー情報
+            - id (int): ツリーID
+            - name (str): ツリー名
+          - shared_structures (array): 共有された構造のリスト
+            - id (int): 構造ID
+            - node_id (int): ノードID（複数ツリーで同じIDが使用される）
+            - node_name (str): ノード名
+            - level (int): 階層レベル
+            - path (str): パス情報
+            - source_structure_id (int): 共有元構造ID
+        
+        エラーレスポンス:
+        - 400: 必須パラメータ不足
+        - 404: 指定されたリソースが存在しない
+        - 500: サーバー内部エラー
+        """
+        target_tree = self.get_object()
+        
+        # パラメータ取得（前回と同じ）
+        source_tree_id = request.data.get('source_tree_id')
+        source_structure_id = request.data.get('source_structure_id')
+        parent_id = request.data.get('parent_id')
+        include_children = request.data.get('include_children', True)
+        relationship_type = request.data.get('relationship_type', 'assembly')
+        quantity = request.data.get('quantity', 1.0)
+        is_master = request.data.get('is_master', False)
+        
+        if not all([source_tree_id, source_structure_id, parent_id]):
+            return Response({
+                'success': False,
+                'message': 'ソースツリーID、ソース構造ID、親構造IDは必須です'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            source_tree = Tree.objects.get(id=source_tree_id)
+            source_structure = TreeStructure.objects.get(
+                id=source_structure_id,
+                tree=source_tree
+            )
+            parent_structure = TreeStructure.objects.get(
+                id=parent_id,
+                tree=target_tree
+            )
+            
+            with transaction.atomic():
+                # アクティブバージョン取得（前回と同じ）
+                active_version = TreeVersion.objects.filter(
+                    tree=target_tree,
+                    status__in=['draft', 'review', 'approved']
+                ).order_by('-version_number').first()
+                
+                if not active_version:
+                    active_version = TreeVersion.objects.create(
+                        tree=target_tree,
+                        version_number=1,
+                        version_name=f"{target_tree.name} v1",
+                        status='draft',
+                        created_by=request.user if request.user.is_authenticated else None,
+                        effective_date=timezone.now()
+                    )
+                
+                # 共有構造を作成（真の共有版）
+                shared_structures = self._create_shared_structure_recursively(
+                    source_structure=source_structure,
+                    target_tree=target_tree,
+                    target_parent=parent_structure,
+                    include_children=include_children,
+                    relationship_type=relationship_type,
+                    quantity=quantity,
+                    is_master=is_master,
+                    user=request.user if request.user.is_authenticated else None,
+                    active_version=active_version
+                )
+                
+                # 変更ログ作成
+                TreeChangeLog.objects.create(
+                    tree_version=active_version,
+                    changed_by=request.user if request.user.is_authenticated else None,
+                    change_type='share_structure',
+                    description=f"構造 '{source_structure.node.name}' をツリー '{source_tree.name}' から共有しました。",
+                    affected_node=source_structure.node.code if hasattr(source_structure.node, 'code') and source_structure.node.code else None,
+                    significance_level=2,  # 重要
+                    new_data={
+                        'source_tree_id': source_tree.id,
+                        'source_tree_name': source_tree.name,
+                        'source_structure_id': source_structure.id,
+                        'shared_structures_count': len(shared_structures),
+                        'include_children': include_children,
+                        'is_true_sharing': True  # 真の共有であることを示すフラグ
+                    }
+                )
+                
+                response_data = {
+                    'success': True,
+                    'message': f'ノード構造 "{source_structure.node.name}" を共有しました（{len(shared_structures)}個の構造）',
+                    'data': {
+                        'shared_count': len(shared_structures),
+                        'is_true_sharing': True,
+                        'source_tree': {
+                            'id': source_tree.id,
+                            'name': source_tree.name
+                        },
+                        'shared_structures': [
+                            {
+                                'id': struct.id,
+                                'node_id': struct.node.id,  # 同じnode.idが複数のツリーで使われる
+                                'node_name': struct.node.name,
+                                'level': struct.level,
+                                'path': struct.path,
+                                'source_structure_id': struct.source_structure.id if struct.source_structure else None
+                            } for struct in shared_structures
+                        ]
+                    }
+                }
+                
+                return Response(response_data, status=status.HTTP_201_CREATED)
+                
+        except Exception as e:
+            return Response({
+                'success': False,
+                'message': f'共有構造追加エラー: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def _create_shared_structure_recursively(self, source_structure, target_tree, target_parent,
+                                           include_children=True, relationship_type='assembly',
+                                           quantity=1.0, is_master=False, user=None,
+                                           active_version=None):
+        """
+        真の共有構造を再帰的に作成する補助メソッド
+        
+        機能説明:
+        - 同じTreeNodeオブジェクトを複数のツリーで参照する構造を作成
+        - 新しいTreeNodeは作成せず、既存のTreeNodeを直接参照
+        - 子ノードも含めて再帰的に共有構造を作成
+        
+        パラメータ:
+        - source_structure (TreeStructure): コピー元の構造オブジェクト
+        - target_tree (Tree): コピー先のツリーオブジェクト
+        - target_parent (TreeStructure): コピー先での親構造
+        - include_children (bool): 子ノードも含めるかどうか
+        - relationship_type (str): 関係タイプ
+        - quantity (float): 数量
+        - is_master (bool): マスター構造かどうか
+        - user (User): 実行ユーザー
+        - active_version (TreeVersion): アクティブなバージョン
+        
+        戻り値:
+        - list[TreeStructure]: 作成された共有構造のリスト
+        
+        注意事項:
+        - 真の共有のため、同じTreeNodeオブジェクトを複数の構造で参照
+        - source_structureフィールドで共有元を記録
+        - 共有インスタンスは is_master=False に設定
+        """
+        shared_structures = []
+        
+        try:
+            # 重要：新しいTreeNodeは作成せず、既存のnodeを直接参照
+            new_structure = TreeStructure.objects.create(
+                tree=target_tree,
+                parent=target_parent,
+                node=source_structure.node,  # 同じTreeNodeオブジェクトを参照！
+                level=target_parent.level + 1,
+                path=f"{target_parent.path}.{source_structure.node.id}",
+                sequence=TreeStructure.objects.filter(parent=target_parent).count(),
+                relationship_type=relationship_type,
+                source_structure=source_structure,  # 共有元の構造を記録
+                is_master=False,  # 共有インスタンスはマスターではない
+                quantity=quantity,
+                effective_date=timezone.now()
+            )
+            shared_structures.append(new_structure)
+            
+            # 子ノードも共有する場合
+            if include_children:
+                child_structures = TreeStructure.objects.filter(
+                    tree=source_structure.tree,
+                    parent=source_structure
+                ).order_by('sequence')
+                
+                for child in child_structures:
+                    child_shared = self._create_shared_structure_recursively(
+                        source_structure=child,
+                        target_tree=target_tree,
+                        target_parent=new_structure,
+                        include_children=True,
+                        relationship_type=child.relationship_type,
+                        quantity=child.quantity,
+                        is_master=False,
+                        user=user,
+                        active_version=active_version
+                    )
+                    shared_structures.extend(child_shared)
+                    
+        except Exception as e:
+            print(f"Error creating shared structure {source_structure.id}: {str(e)}")
+            raise
+        
+        return shared_structures
+
+    @action(detail=True, methods=['post'])
+    def update_shared_node(self, request, pk=None):
+        """
+        共有ノードを更新し、全ての共有先に変更を反映するAPIエンドポイント
+        
+        エンドポイント: POST /api/trees/{tree_id}/update_shared_node/
+        
+        機能説明:
+        - 共有されているTreeNodeの情報を更新
+        - 更新内容が同じTreeNodeを参照している全てのツリーに自動反映
+        - 各ツリーの変更ログに更新履歴を記録
+        - トランザクション処理により安全に更新
+        
+        リクエストパラメータ:
+        - node_id (int, 必須): 更新対象のTreeNode ID
+        - name (str, 任意): 新しいノード名
+        - description (str, 任意): 新しい説明（nullを送信すると空文字に設定）
+        
+        レスポンスパラメータ:
+        - success (bool): 処理の成功/失敗
+        - message (str): 処理結果メッセージ（影響を受けたツリー数を含む）
+        - data (object): 処理結果データ
+          - node_id (int): 更新されたノードID
+          - updated_name (str): 更新後のノード名
+          - updated_description (str): 更新後の説明
+          - affected_trees (array): 影響を受けたツリーのリスト
+            - id (int): ツリーID
+            - name (str): ツリー名
+        
+        エラーレスポンス:
+        - 400: ノードIDが未指定
+        - 404: 指定されたノードが存在しない
+        - 500: サーバー内部エラー
+        
+        注意事項:
+        - 一つのノードの変更が複数のツリーに影響するため、慎重に使用
+        - 変更前の値も変更ログに記録される
+        """
+        tree = self.get_object()
+        
+        node_id = request.data.get('node_id')
+        name = request.data.get('name')
+        description = request.data.get('description')
+        
+        if not node_id:
+            return Response({
+                'success': False,
+                'message': 'ノードIDは必須です'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            with transaction.atomic():
+                # TreeNodeを更新
+                node = TreeNode.objects.get(id=node_id)
+                old_name = node.name
+                old_description = node.description
+                
+                if name:
+                    node.name = name
+                if description is not None:
+                    node.description = description
+                node.save()
+                
+                # このノードを使用している全てのツリーを取得
+                affected_trees = Tree.objects.filter(
+                    structures__node=node
+                ).distinct()
+                
+                # 各ツリーの変更ログを作成
+                for affected_tree in affected_trees:
+                    active_version = TreeVersion.objects.filter(
+                        tree=affected_tree,
+                        status__in=['draft', 'review', 'approved']
+                    ).order_by('-version_number').first()
+                    
+                    if active_version:
+                        TreeChangeLog.objects.create(
+                            tree_version=active_version,
+                            changed_by=request.user if request.user.is_authenticated else None,
+                            change_type='update_metadata',
+                            description=f"共有ノード '{node.name}' が更新されました。",
+                            affected_node=node.code if hasattr(node, 'code') and node.code else None,
+                            significance_level=1,
+                            previous_data={
+                                'name': old_name,
+                                'description': old_description
+                            },
+                            new_data={
+                                'name': node.name,
+                                'description': node.description
+                            }
+                        )
+                
+                return Response({
+                    'success': True,
+                    'message': f'共有ノード "{node.name}" を更新しました。{len(affected_trees)}個のツリーに反映されました。',
+                    'data': {
+                        'node_id': node.id,
+                        'updated_name': node.name,
+                        'updated_description': node.description,
+                        'affected_trees': [
+                            {
+                                'id': tree.id,
+                                'name': tree.name
+                            } for tree in affected_trees
+                        ]
+                    }
+                }, status=status.HTTP_200_OK)
+                
+        except TreeNode.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': '指定されたノードが存在しません'
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({
+                'success': False,
+                'message': f'共有ノード更新エラー: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=True, methods=['get'])
+    def get_shared_usage(self, request, pk=None):
+        """
+        ノードの共有使用状況を確認するAPIエンドポイント
+        
+        エンドポイント: GET /api/trees/{tree_id}/get_shared_usage/?node_id={node_id}
+        
+        機能説明:
+        - 指定されたTreeNodeがどのツリーで使用されているかを確認
+        - 共有ノードの使用状況と依存関係を把握
+        - ノード削除前の影響範囲確認に使用
+        - 各使用箇所の詳細情報（レベル、パス等）も取得可能
+        
+        クエリパラメータ:
+        - node_id (int, 必須): 確認対象のTreeNode ID
+        
+        レスポンスパラメータ:
+        - success (bool): 処理の成功/失敗
+        - message (str): 処理結果メッセージ（使用箇所数を含む）
+        - data (object): 使用状況データ
+          - node (object): ノード基本情報
+            - id (int): ノードID
+            - name (str): ノード名
+            - node_type (str): ノードタイプ
+          - usage_count (int): 使用箇所の総数
+          - used_in_trees (array): 使用されているツリーと構造のリスト
+            - tree_id (int): ツリーID
+            - tree_name (str): ツリー名
+            - structure_id (int): 構造ID
+            - level (int): 階層レベル
+            - is_master (bool): マスター構造かどうか
+            - path (str): ツリー内でのパス
+        
+        エラーレスポンス:
+        - 400: node_idパラメータが未指定
+        - 404: 指定されたノードが存在しない
+        - 500: サーバー内部エラー
+        
+        使用例:
+        - ノード削除前の影響範囲確認
+        - 共有ノードの依存関係分析
+        - データ整合性チェック
+        """
+        tree = self.get_object()
+        node_id = request.query_params.get('node_id')
+        
+        if not node_id:
+            return Response({
+                'success': False,
+                'message': 'ノードIDは必須です'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            node = TreeNode.objects.get(id=node_id)
+            
+            # このノードを使用している全ての構造を取得
+            structures = TreeStructure.objects.filter(node=node).select_related('tree')
+            
+            usage_data = {
+                'node': {
+                    'id': node.id,
+                    'name': node.name,
+                    'node_type': node.node_type
+                },
+                'usage_count': len(structures),
+                'used_in_trees': [
+                    {
+                        'tree_id': structure.tree.id,
+                        'tree_name': structure.tree.name,
+                        'structure_id': structure.id,
+                        'level': structure.level,
+                        'is_master': structure.is_master,
+                        'path': structure.path
+                    } for structure in structures
+                ]
+            }
+            
+            return Response({
+                'success': True,
+                'message': f'ノード "{node.name}" は {len(structures)} 個の場所で使用されています',
+                'data': usage_data
+            }, status=status.HTTP_200_OK)
+            
+        except TreeNode.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': '指定されたノードが存在しません'
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({
+                'success': False,
+                'message': f'使用状況取得エラー: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+
+    @action(detail=True, methods=['post'])
+    def add_shared_tree_structure(self, request, pk=None):
+        """
+        既存ツリーの全構造を真の共有として新規ツリーに追加するAPIエンドポイント
+        
+        エンドポイント: POST /api4/tree/{target_tree_id}/add_shared_tree_structure/
+        
+        機能説明:
+        - Tree1の全構造をTree2で真の共有として使用
+        - 同じTreeNodeオブジェクトを複数のツリーで共有参照
+        - Tree1での変更（ノード名、説明等）がTree2にも自動的に反映
+        - 階層構造も完全に保持
+        
+        重要な特徴:
+        - TreeNodeオブジェクトは1つだけ存在し、複数のTreeStructureから参照
+        - Tree1でノード名を変更すると、Tree2でも即座に同じ変更が見える
+        - Tree1でノードを削除すると、Tree2でも削除される
+        - 真の共有により、データの整合性が自動的に保たれる
+        
+        リクエストパラメータ:
+        - source_tree_id (int, 必須): 共有元ツリーのID
+        - parent_structure_id (int, 必須): 共有先での親構造ID
+        - include_root (bool, 任意): ルートノードも含めるかどうか (デフォルト: False)
+        - relationship_type (str, 任意): 親との関係タイプ (デフォルト: 'assembly')
+                                       選択肢: 'assembly', 'reference', 'option', 'spare', 'alternate', 'phantom'
+        - quantity (float, 任意): 数量 (デフォルト: 1.0)
+        
+        レスポンスパラメータ:
+        - success (bool): 処理の成功/失敗
+        - message (str): 処理結果メッセージ
+        - data (object): 処理結果データ
+          - shared_structures_count (int): 共有された構造の数
+          - sharing_mode (str): 共有モード（常に'true_sharing'）
+          - auto_sync_enabled (bool): 自動同期が有効かどうか（常にTrue）
+          - include_root (bool): ルートノードを含むかどうか
+          - source_tree (object): 共有元ツリー情報
+            - id (int): ツリーID
+            - name (str): ツリー名
+            - note (str): 変更元ツリーの説明
+          - target_tree (object): 共有先ツリー情報
+            - id (int): ツリーID
+            - name (str): ツリー名
+            - note (str): 共有先ツリーの説明
+          - parent_structure (object): 親構造情報
+            - id (int): 構造ID
+            - node_name (str): 親ノード名
+          - shared_structures (array): 共有された構造のリスト（最初の20件）
+            - structure_id (int): 構造ID
+            - node_id (int): ノードID（複数ツリーで同じIDが使用される）
+            - node_name (str): ノード名
+            - level (int): 階層レベル
+            - path (str): ツリー内パス
+            - is_true_sharing (bool): 真の共有であることを示すフラグ
+            - source_structure_id (int): 共有元構造ID
+          - sharing_explanation (object): 共有機能の説明
+            - how_it_works (str): 動作原理の説明
+            - auto_sync (str): 自動同期の説明
+            - data_consistency (str): データ整合性の説明
+            - deletion_impact (str): 削除時の影響説明
+        
+        エラーレスポンス:
+        - 400: 必須パラメータ不足
+        - 404: 指定されたリソースが存在しない
+        - 500: サーバー内部エラー
+        """
+        target_tree = self.get_object()
+        
+        # リクエストデータの取得
+        source_tree_id = request.data.get('source_tree_id')
+        parent_structure_id = request.data.get('parent_structure_id')
+        include_root = request.data.get('include_root', False)
+        relationship_type = request.data.get('relationship_type', 'assembly')
+        quantity = request.data.get('quantity', 1.0)
+        
+        # バリデーション
+        if not source_tree_id:
+            return Response({
+                'success': False,
+                'message': 'source_tree_idは必須です'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not parent_structure_id:
+            return Response({
+                'success': False,
+                'message': 'parent_structure_idは必須です'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            # ソースツリーと親構造の存在確認
+            source_tree = Tree.objects.get(id=source_tree_id)
+            parent_structure = TreeStructure.objects.get(
+                id=parent_structure_id,
+                tree=target_tree
+            )
+            
+            with transaction.atomic():
+                # アクティブバージョンの取得
+                active_version = TreeVersion.objects.filter(
+                    tree=target_tree,
+                    status__in=['draft', 'review', 'approved']
+                ).order_by('-version_number').first()
+                
+                if not active_version:
+                    active_version = TreeVersion.objects.create(
+                        tree=target_tree,
+                        version_number=1,
+                        version_name=f"{target_tree.name} v1",
+                        status='draft',
+                        created_by=request.user if request.user.is_authenticated else None,
+                        effective_date=timezone.now()
+                    )
+                
+                # 真の共有として構造をコピー
+                shared_structures = self._create_true_shared_structure(
+                    source_tree=source_tree,
+                    target_tree=target_tree,
+                    parent_structure=parent_structure,
+                    include_root=include_root,
+                    relationship_type=relationship_type,
+                    quantity=quantity,
+                    user=request.user if request.user.is_authenticated else None,
+                    active_version=active_version
+                )
+                
+                # 変更ログ記録
+                TreeChangeLog.objects.create(
+                    tree_version=active_version,
+                    changed_by=request.user if request.user.is_authenticated else None,
+                    change_type='share_structure',
+                    description=f"ツリー「{source_tree.name}」の全構造を真の共有として追加しました（{len(shared_structures)}個のノード）",
+                    significance_level=2,  # 重要
+                    new_data={
+                        'source_tree_id': source_tree.id,
+                        'source_tree_name': source_tree.name,
+                        'shared_count': len(shared_structures),
+                        'sharing_mode': 'true_sharing',
+                        'auto_sync_enabled': True,
+                        'include_root': include_root,
+                        'parent_structure_id': parent_structure.id,
+                        'note': 'Tree1での変更がTree2に自動反映されます'
+                    }
+                )
+                
+                # レスポンスデータ構築
+                response_data = {
+                    'success': True,
+                    'message': f"ツリー「{source_tree.name}」の構造を真の共有として追加しました（{len(shared_structures)}個のノード）。Tree1での変更がTree2に自動反映されます。",
+                    'data': {
+                        'shared_structures_count': len(shared_structures),
+                        'sharing_mode': 'true_sharing',
+                        'auto_sync_enabled': True,
+                        'include_root': include_root,
+                        'source_tree': {
+                            'id': source_tree.id,
+                            'name': source_tree.name,
+                            'note': '変更元ツリー（このツリーでの変更が他の共有先にも反映）'
+                        },
+                        'target_tree': {
+                            'id': target_tree.id,
+                            'name': target_tree.name,
+                            'note': '共有先ツリー（変更元の変更が自動反映される）'
+                        },
+                        'parent_structure': {
+                            'id': parent_structure.id,
+                            'node_name': parent_structure.node.name
+                        },
+                        'shared_structures': [
+                            {
+                                'structure_id': struct.id,
+                                'node_id': struct.node.id,  # 同じnode.idが複数ツリーで使用される
+                                'node_name': struct.node.name,
+                                'level': struct.level,
+                                'path': struct.path,
+                                'is_true_sharing': True,
+                                'source_structure_id': struct.source_structure.id if struct.source_structure else None
+                            } for struct in shared_structures[:20]  # 最初の20件のみ返却
+                        ],
+                        'sharing_explanation': {
+                            'how_it_works': 'Tree1とTree2で同じTreeNodeオブジェクトを共有参照',
+                            'auto_sync': 'Tree1でのノード名変更、説明変更等がTree2にも即座に反映',
+                            'data_consistency': '両ツリーで常に同じデータが表示される',
+                            'deletion_impact': 'Tree1でノード削除すると、Tree2でも削除される'
+                        }
+                    }
+                }
+                
+                return Response(response_data, status=status.HTTP_201_CREATED)
+                
+        except Tree.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': '指定されたソースツリーが存在しません'
+            }, status=status.HTTP_404_NOT_FOUND)
+        except TreeStructure.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': '指定された親構造が存在しません'
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({
+                'success': False,
+                'message': f'真の共有構造追加エラー: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def _create_true_shared_structure(self, source_tree, target_tree, parent_structure,
+                                    include_root=False, relationship_type='assembly',
+                                    quantity=1.0, user=None, active_version=None):
+        """
+        真の共有構造を作成する補助メソッド
+        
+        重要：
+        - 新しいTreeNodeは作成しない
+        - 既存のTreeNodeオブジェクトを直接参照する
+        - これにより、Tree1での変更がTree2にも自動反映される
+        """
+        shared_structures = []
+        structure_mapping = {}  # 元構造ID -> 新構造ID のマッピング
+        
+        # ソース構造を階層順で取得
+        source_structures_query = TreeStructure.objects.filter(
+            tree=source_tree
+        ).select_related('node').order_by('level', 'sequence')
+        
+        if not include_root:
+            source_structures_query = source_structures_query.exclude(level=0)
+        
+        source_structures = list(source_structures_query)
+        
+        for source_structure in source_structures:
+            # 親構造の決定
+            if source_structure.level == 0 or (source_structure.level == 1 and not include_root):
+                # ルートまたは最上位レベル
+                current_parent = parent_structure
+                current_level = parent_structure.level + 1
+            else:
+                # 子ノード：親構造をマッピングから取得
+                source_parent_id = source_structure.parent.id if source_structure.parent else None
+                if source_parent_id in structure_mapping:
+                    parent_structure_id = structure_mapping[source_parent_id]
+                    current_parent = TreeStructure.objects.get(id=parent_structure_id)
+                    current_level = current_parent.level + 1
+                else:
+                    continue  # 親が見つからない場合はスキップ
+            
+            # 新しいTreeStructureを作成（同じTreeNodeを参照）
+            # 重要：source_structure.nodeをそのまま使用（新しいTreeNodeは作成しない）
+            new_structure = TreeStructure.objects.create(
+                tree=target_tree,
+                parent=current_parent,
+                node=source_structure.node,  # ★ 同じTreeNodeオブジェクトを参照！
+                level=current_level,
+                path=f"{current_parent.path}.{source_structure.node.id}",
+                sequence=TreeStructure.objects.filter(parent=current_parent).count(),
+                relationship_type=relationship_type if source_structure.level == 0 or (source_structure.level == 1 and not include_root) else source_structure.relationship_type,
+                source_structure=source_structure,  # 共有元を記録
+                is_master=False,  # 共有インスタンスはマスターではない
+                quantity=quantity if source_structure.level == 0 or (source_structure.level == 1 and not include_root) else source_structure.quantity,
+                effective_date=timezone.now()
+            )
+            
+            # マッピングに追加
+            structure_mapping[source_structure.id] = new_structure.id
+            shared_structures.append(new_structure)
+        
+        return shared_structures
+
+
+    @action(detail=False, methods=['post'])
+    def update_shared_node(self, request):
+        """
+        共有ノードを更新し、全ての共有先に変更を自動反映するAPIエンドポイント
+        
+        エンドポイント: POST /api/trees/update_shared_node/
+        
+        機能説明:
+        - TreeNodeオブジェクトを直接更新
+        - 同じTreeNodeを参照している全てのTreeStructureに即座に反映
+        - Tree1で実行すると、Tree2, Tree3... 全ての共有先で変更が見える
+        - リアルタイム同期により、データの不整合を防止
+        
+        リクエストパラメータ:
+        - node_id (int, 必須): 更新対象のTreeNode ID
+        - name (str, 任意): 新しいノード名
+        - description (str, 任意): 新しい説明（nullを送信すると空文字に設定）
+        
+        レスポンスパラメータ:
+        - success (bool): 処理の成功/失敗
+        - message (str): 処理結果メッセージ（影響を受けたツリー数を含む）
+        - data (object): 処理結果データ
+          - node_id (int): 更新されたノードID
+          - updated_name (str): 更新後のノード名
+          - updated_description (str): 更新後の説明
+          - affected_trees_count (int): 影響を受けたツリーの数
+          - affected_trees (array): 影響を受けたツリーのリスト
+            - id (int): ツリーID
+            - name (str): ツリー名
+            - structures_count (int): そのツリー内での使用箇所数
+          - sync_status (str): 同期状態（常に'completed'）
+          - sync_explanation (object): 同期処理の説明
+            - immediate_effect (str): 即座に反映される旨の説明
+            - no_delay (str): 遅延なしの説明
+            - data_consistency (str): データ整合性の説明
+        
+        エラーレスポンス:
+        - 400: node_idが未指定
+        - 404: 指定されたノードが存在しない
+        - 500: サーバー内部エラー
+        
+        注意事項:
+        - 一つのノードの変更が複数のツリーに影響するため、慎重に使用
+        - 変更前の値も変更ログに記録される
+        - 各ツリーの変更履歴に自動同期による更新が記録される
+        """
+        node_id = request.data.get('node_id')
+        name = request.data.get('name')
+        description = request.data.get('description')
+        
+        if not node_id:
+            return Response({
+                'success': False,
+                'message': 'node_idは必須です'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            with transaction.atomic():
+                # 更新対象のTreeNodeを取得
+                node = TreeNode.objects.get(id=node_id)
+                old_name = node.name
+                old_description = node.description
+                
+                # TreeNodeを更新（これだけで全ての共有先に反映される）
+                if name:
+                    node.name = name
+                if description is not None:
+                    node.description = description
+                node.save()
+                
+                # このノードを使用している全てのツリーを取得
+                affected_structures = TreeStructure.objects.filter(
+                    node=node
+                ).select_related('tree').distinct()
+                
+                affected_trees = {}
+                for structure in affected_structures:
+                    tree = structure.tree
+                    if tree.id not in affected_trees:
+                        affected_trees[tree.id] = {
+                            'tree': tree,
+                            'structures_count': 0
+                        }
+                    affected_trees[tree.id]['structures_count'] += 1
+                
+                # 各ツリーの変更ログを作成
+                for tree_data in affected_trees.values():
+                    tree = tree_data['tree']
+                    active_version = TreeVersion.objects.filter(
+                        tree=tree,
+                        status__in=['draft', 'review', 'approved']
+                    ).order_by('-version_number').first()
+                    
+                    if active_version:
+                        TreeChangeLog.objects.create(
+                            tree_version=active_version,
+                            changed_by=request.user if request.user.is_authenticated else None,
+                            change_type='update_metadata',
+                            description=f"共有ノード '{node.name}' が更新されました（自動同期）。",
+                            affected_node=node.code if hasattr(node, 'code') and node.code else None,
+                            significance_level=1,
+                            previous_data={
+                                'name': old_name,
+                                'description': old_description
+                            },
+                            new_data={
+                                'name': node.name,
+                                'description': node.description
+                            },
+                            additional_info={
+                                'sync_type': 'automatic',
+                                'sharing_enabled': True
+                            }
+                        )
+                
+                response_data = {
+                    'success': True,
+                    'message': f'共有ノード「{node.name}」を更新しました。{len(affected_trees)}個のツリーに自動反映されました。',
+                    'data': {
+                        'node_id': node.id,
+                        'updated_name': node.name,
+                        'updated_description': node.description,
+                        'affected_trees_count': len(affected_trees),
+                        'affected_trees': [
+                            {
+                                'id': tree_data['tree'].id,
+                                'name': tree_data['tree'].name,
+                                'structures_count': tree_data['structures_count']
+                            } for tree_data in affected_trees.values()
+                        ],
+                        'sync_status': 'completed',
+                        'sync_explanation': {
+                            'immediate_effect': '変更は即座に全ツリーで反映済み',
+                            'no_delay': 'リアルタイム同期のため遅延なし',
+                            'data_consistency': '全ツリーで同じデータが表示される'
+                        }
+                    }
+                }
+                
+                return Response(response_data, status=status.HTTP_200_OK)
+                
+        except TreeNode.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': '指定されたノードが存在しません'
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({
+                'success': False,
+                'message': f'共有ノード更新エラー: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+    @action(detail=False, methods=['get'])
+    def check_node_sharing_status(self, request):
+        """
+        ノードの共有状況と影響範囲を確認するAPIエンドポイント
+        
+        エンドポイント: GET /api/trees/check_node_sharing_status/?node_id={node_id}
+        
+        機能説明:
+        - 指定されたTreeNodeがどのツリーで使用されているかを確認
+        - 共有状況の詳細分析
+        - 変更時の影響範囲を事前把握
+        - データ整合性の確認
+        
+        クエリパラメータ:
+        - node_id (int, 必須): 確認対象のTreeNode ID
+        
+        レスポンスパラメータ:
+        - success (bool): 処理の成功/失敗
+        - message (str): 処理結果メッセージ（使用箇所数を含む）
+        - data (object): 共有状況データ
+          - node (object): ノード基本情報
+            - id (int): ノードID
+            - name (str): ノード名
+            - node_type (str): ノードタイプ
+            - description (str): ノードの説明
+            - status (str): ノードのステータス
+            - code_info (object): 関連コード情報（存在する場合）
+              - id (int): コードID
+              - code (str): コード文字列
+              - name (str): コード名
+          - is_shared (bool): 複数ツリーで共有されているかどうか
+          - usage_count (int): 使用箇所の総数
+          - trees_count (int): 使用されているツリーの数
+          - sharing_details (array): 使用されているツリーと構造のリスト
+            - tree_id (int): ツリーID
+            - tree_name (str): ツリー名
+            - tree_status (str): ツリーのステータス
+            - usage_count_in_tree (int): そのツリー内での使用回数
+            - structures (array): そのツリー内での構造情報
+              - structure_id (int): 構造ID
+              - level (int): 階層レベル
+              - path (str): ツリー内でのパス
+              - relationship_type (str): 関係タイプ
+              - is_master (bool): マスター構造かどうか
+              - source_structure_id (int): 共有元構造ID
+          - impact_analysis (object): 影響分析情報
+            - is_truly_shared (bool): 真の共有状態かどうか
+            - sharing_type (str): 共有タイプ（'true_sharing' または 'single_use'）
+            - change_impact (object): 変更時の影響
+              - affected_trees (int): 影響を受けるツリー数
+              - affected_structures (int): 影響を受ける構造数
+              - automatic_sync (bool): 自動同期されるかどうか
+              - risk_level (str): リスクレベル（'low', 'medium', 'high'）
+            - recommendations (array): 推奨事項のリスト
+          - sync_explanation (object): 同期機能の説明（共有されている場合）
+            - how_sharing_works (str): 共有の仕組み説明
+            - change_propagation (str): 変更伝播の説明
+            - data_consistency (str): データ整合性の説明
+            - automatic_sync (str): 自動同期の説明
+        
+        エラーレスポンス:
+        - 400: node_idパラメータが未指定
+        - 404: 指定されたノードが存在しない
+        - 500: サーバー内部エラー
+        
+        使用例:
+        - ノード削除前の影響範囲確認
+        - 共有ノードの依存関係分析
+        - データ整合性チェック
+        - 変更前のリスクアセスメント
+        """
+        node_id = request.query_params.get('node_id')
+        
+        if not node_id:
+            return Response({
+                'success': False,
+                'message': 'node_idパラメータは必須です'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            node = TreeNode.objects.get(id=node_id)
+            
+            # このノードを使用している全ての構造を取得
+            structures = TreeStructure.objects.filter(
+                node=node
+            ).select_related('tree').order_by('tree__name', 'level')
+            
+            # ツリー別の使用状況を集計
+            trees_usage = {}
+            for structure in structures:
+                tree_id = structure.tree.id
+                if tree_id not in trees_usage:
+                    trees_usage[tree_id] = {
+                        'tree': structure.tree,
+                        'structures': [],
+                        'count': 0
+                    }
+                trees_usage[tree_id]['structures'].append(structure)
+                trees_usage[tree_id]['count'] += 1
+            
+            # 共有詳細データの構築
+            sharing_details = []
+            for tree_data in trees_usage.values():
+                tree = tree_data['tree']
+                structures = tree_data['structures']
+                
+                sharing_details.append({
+                    'tree_id': tree.id,
+                    'tree_name': tree.name,
+                    'tree_status': tree.status,
+                    'usage_count_in_tree': len(structures),
+                    'structures': [
+                        {
+                            'structure_id': struct.id,
+                            'level': struct.level,
+                            'path': struct.path,
+                            'relationship_type': struct.relationship_type,
+                            'is_master': struct.is_master,
+                            'source_structure_id': struct.source_structure.id if struct.source_structure else None,
+                        } for struct in structures
+                    ]
+                })
+            
+            # 影響分析
+            total_usage = len(structures)
+            trees_count = len(trees_usage)
+            is_shared = trees_count > 1
+            
+            impact_analysis = {
+                'is_truly_shared': is_shared,
+                'sharing_type': 'true_sharing' if is_shared else 'single_use',
+                'change_impact': {
+                    'affected_trees': trees_count,
+                    'affected_structures': total_usage,
+                    'automatic_sync': is_shared,
+                    'risk_level': 'high' if trees_count > 3 else 'medium' if trees_count > 1 else 'low'
+                },
+                'recommendations': []
+            }
+            
+            if is_shared:
+                impact_analysis['recommendations'].extend([
+                    'このノードの変更は複数のツリーに影響します',
+                    '変更前に関係者への通知を推奨',
+                    'バックアップを事前に取得してください'
+                ])
+            else:
+                impact_analysis['recommendations'].append('単一ツリーでのみ使用されているため、変更の影響は限定的です')
+            
+            response_data = {
+                'success': True,
+                'message': f'ノード「{node.name}」の共有状況を取得しました（{trees_count}個のツリーで使用）',
+                'data': {
+                    'node': {
+                        'id': node.id,
+                        'name': node.name,
+                        'node_type': node.node_type,
+                        'description': node.description or '',
+                        'status': node.status,
+                        'code_info': {
+                            'id': node.code.id,
+                            'code': node.code.code,
+                            'name': node.code.name
+                        } if node.code else None
+                    },
+                    'is_shared': is_shared,
+                    'usage_count': total_usage,
+                    'trees_count': trees_count,
+                    'sharing_details': sharing_details,
+                    'impact_analysis': impact_analysis,
+                    'sync_explanation': {
+                        'how_sharing_works': '同じTreeNodeオブジェクトを複数のTreeStructureが参照',
+                        'change_propagation': 'TreeNodeの変更は即座に全ての参照先に反映',
+                        'data_consistency': '全ツリーで常に同じデータが表示される',
+                        'automatic_sync': 'システムによる自動同期（手動同期不要）'
+                    } if is_shared else {
+                        'sharing_status': '現在共有されていません（単一ツリーでのみ使用）'
+                    }
+                }
+            }
+            
+            return Response(response_data, status=status.HTTP_200_OK)
+            
+        except TreeNode.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': '指定されたノードが存在しません'
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({
+                'success': False,
+                'message': f'共有状況確認エラー: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 class TreeStructureViewSet(viewsets.ModelViewSet):
     """TreeStructureの作成・読取・更新・削除を行うViewSet"""

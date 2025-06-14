@@ -1,0 +1,114 @@
+Prefix テーブル
+name: プレフィックス - コード生成時の接頭辞（例：AAA）
+description: 説明 - プレフィックスの用途や使用条件等の説明
+code_type: コード種別 - 生成されるコードの種類（組、部品、購入品）
+next_number: 次の採番 - 次に割り当てる連番
+
+Code テーブル
+code: コード - 生成された完全なコード文字列
+name: コード名 - 部品コードの名称
+prefix: プレフィックス - このコードが使用するプレフィックス
+description: 説明 - コードの詳細説明
+status: ステータス - コードの現在の状態
+sequential_number: 連番 - プレフィックス内での採番
+
+CodeVersion テーブル
+code: 部品コード - バージョン管理対象のコード
+version: バージョン番号 - コードのバージョン（1から順に増加）
+code_number: コード番号 - 生成された完全なコード番号
+is_current: 現行バージョン - このバージョンが現在有効なバージョンかどうか
+status: ステータス - このバージョンの承認状態
+reason: 変更理由 - このバージョンでの変更内容と理由
+changed_by: 変更者 - このバージョンを作成したユーザー
+effective_date: 有効開始日 - このバージョンが有効となる日時
+
+CodeChangeLog テーブル
+code_version: コードバージョン - 変更が発生したコードバージョン
+changed_at: 変更日時 - 変更が行われた日時
+changed_by: 変更者 - 変更を行ったユーザー
+change_type: 変更種別 - 実施された変更の種類
+reason: 変更理由 - 変更を行った理由の詳細説明
+previous_status: 変更前ステータス - ステータス変更前の状態
+new_status: 変更後ステータス - ステータス変更後の状態
+additional_info: 追加情報 - 変更に関する追加情報をJSON形式で保存
+
+CodeMetadata テーブル
+code_version: コードバージョン - この属性情報が紐づくコードバージョン
+unit: 単位 - 部品の単位（個、m、kg等）
+material: 材質 - 部品の材質情報
+keywords: キーワード - 部品の検索用キーワード
+category: カテゴリ - 部品の分類カテゴリ
+notes: 備考 - その他の補足情報
+specifications: 仕様情報 - 部品の詳細仕様をJSON形式で保存
+weight: 重量(kg) - 部品の重量
+dimensions: 寸法 - 部品の寸法情報
+
+Tree テーブル
+name: ツリー名 - ツリー構造の識別名
+description: 説明 - ツリーの用途や特徴についての説明
+status: 状態 - ツリーの現在の状態
+version: バージョン - ツリーのバージョン番号
+created_by: 作成者 - ツリーの作成者
+last_modified_by: 最終更新者 - ツリーの最終更新者
+
+TreeNode テーブル
+name: ノード名 - このノードの表示名
+description: 説明 - このノードの説明
+node_type: ノードタイプ - ノードの種類（ルート、コード、グループ）
+status: 状態 - ノードの現在の状態
+code: 関連コード - このノードに関連付けられた部品コード
+
+TreeStructure テーブル
+tree: 所属ツリー - このノードが属するツリー
+node: ノード - このツリー構造のノード
+parent: 親構造 - 親ノードの構造
+level: 階層レベル - ツリー内での深さ
+path: パス - ルートからの経路をIDで表現
+sequence: 表示順序 - 同じ階層内での表示順序
+relationship_type: 関係タイプ - 親子関係の種類を指定
+source_structure: 共有元構造 - この構造が共有している元の構造
+is_master: マスター構造 - この構造が共有のマスターかどうか
+quantity: 数量 - この構造での使用数量
+effective_date: 有効開始日 - この構造が有効となる日時
+expiry_date: 有効終了日 - この構造が無効となる日時
+
+TreeVersion テーブル
+tree: ツリー - バージョン管理対象のツリー
+version_number: バージョン番号 - ツリーのバージョンを示す番号
+version_name: バージョン名 - このバージョンの識別名
+version_description: バージョン説明 - このバージョンでの変更内容や特記事項
+status: 状態 - このバージョンの現在の状態
+created_by: 作成者 - このバージョンを作成したユーザー
+approved_by: 承認者 - このバージョンを承認したユーザー
+effective_date: 有効開始日 - このバージョンが有効となる日時
+expiry_date: 有効終了日 - このバージョンが無効となる日時
+review_comments: レビューコメント - レビュー時のコメントや指摘事項
+change_summary: 変更サマリー - 前バージョンからの変更内容のサマリー
+
+TreeCodeQuantity テーブル
+tree_structure: ツリー構造 - 数量情報が紐づくツリー構造
+code_version: コードバージョン - 数量情報が紐づく部品コードのバージョン
+quantity: 員数 - 組立に必要な数量
+denominator: 母数 - 製品1台あたりの使用数
+unit: 単位 - 数量の単位（個、m、kg等）
+loss_rate: ロス率(%) - 予期される損失の割合
+minimum_order: 最小発注量 - 一度に発注可能な最小数量
+remarks: 備考 - 数量に関する補足情報
+effective_date: 有効開始日 - この数量情報が有効となる日時
+expiry_date: 有効終了日 - この数量情報が無効となる日時
+
+TreeChangeLog テーブル
+tree_version: ツリーバージョン - 変更が発生したツリーのバージョン
+changed_at: 変更日時 - 変更が行われた日時
+changed_by: 変更者 - 変更を実施したユーザー
+change_type: 変更タイプ - 実施された変更の種類
+description: 変更内容 - 変更の詳細な説明
+affected_node: 影響ノード - 変更の影響を受けたノード
+previous_data: 変更前データ - 変更前の状態をJSON形式で保存
+new_data: 変更後データ - 変更後の状態をJSON形式で保存
+significance_level: 重要度 - 変更の重要度レベル
+reference_documents: 関連文書 - 変更に関連する文書や図面の参照情報
+requires_approval: 承認要否 - この変更が承認を必要とするかどうか
+approved_by: 承認者 - 変更の承認者
+approved_at: 承認日時 - 変更が承認された日時
+notification_sent: 通知送信済み - 関係者への通知が送信済みかどうか

@@ -21,7 +21,6 @@ const treeNodes = ref([]);
 const organizedTree = ref([]);
 const isLoading = ref(true);
 const errorMessage = ref('');
-const search = ref('');
 const isRefreshing = ref(false);
 const selectedNode = ref(null);
 const selectedStructure = ref(null);
@@ -47,6 +46,444 @@ const newNode = reactive({
   quantity: 1,
   is_master: false
 });
+
+
+// ===== 既存ツリー共有関連の状態管理を追加 =====
+// 既存のreactiveの定義の後に追加
+
+// 既存ツリー全構造共有関連
+const addSharedTreeDialog = ref(false);
+const isAddSharedTreeFormValid = ref(false);
+const addSharedTreeForm = ref(null);
+const isAddingSharedTree = ref(false);
+
+// 既存ツリー全構造共有用のデータ
+const addSharedTreeData = reactive({
+  source_tree_id: '',
+  parent_structure_id: '',
+  include_root: false,
+  relationship_type: 'assembly',
+  quantity: 1.0
+});
+
+// 利用可能なツリーリスト（全構造共有用）
+const availableTreesForFullShare = ref([]);
+
+// ===== メソッドを追加 =====
+
+/**
+ * 既存ツリー全構造共有ダイアログを表示
+ */
+const showAddSharedTreeDialog = () => {
+  // フォームをリセット
+  addSharedTreeData.source_tree_id = '';
+  addSharedTreeData.parent_structure_id = selectedNode.value ? selectedNode.value.structure_id : '';
+  addSharedTreeData.include_root = false;
+  addSharedTreeData.relationship_type = 'assembly';
+  addSharedTreeData.quantity = 1.0;
+
+  // バリデーションをリセット
+  if (addSharedTreeForm.value) {
+    addSharedTreeForm.value.resetValidation();
+  }
+
+  // 利用可能なツリーリストを取得
+  fetchAvailableTreesForFullShare();
+
+  // ダイアログを表示
+  addSharedTreeDialog.value = true;
+};
+
+/**
+ * 全構造共有用のツリーリストを取得
+ */
+const fetchAvailableTreesForFullShare = async () => {
+  try {
+    const response = await axios.get(`${apiBaseUrlTree}/`);
+
+    if (response.data && response.data.data) {
+      availableTreesForFullShare.value = response.data.data
+        .filter(t => t.id !== tree.value?.id)
+        .map(t => ({
+          id: t.id,
+          name: t.name,
+          status: t.status,
+          description: t.description || '',
+          display: `${t.name} (${getStatusLabel(t.status)})`
+        }));
+    }
+  } catch (error) {
+    console.error('全構造共有用ツリーリストの取得に失敗しました:', error);
+    snackbar.value = {
+      show: true,
+      text: 'ツリーリストの取得に失敗しました',
+      color: 'error',
+      timeout: 3000
+    };
+  }
+};
+
+/**
+ * 既存ツリーの全構造を共有として追加
+ */
+const addSharedTreeStructure = async () => {
+  if (!isAddSharedTreeFormValid.value) return;
+
+  // 必須パラメータの確認
+  if (!addSharedTreeData.source_tree_id || !addSharedTreeData.parent_structure_id) {
+    snackbar.value = {
+      show: true,
+      text: '必須項目が入力されていません',
+      color: 'error',
+      timeout: 3000
+    };
+    return;
+  }
+
+  isAddingSharedTree.value = true;
+
+  try {
+    const requestData = {
+      source_tree_id: addSharedTreeData.source_tree_id,
+      parent_structure_id: addSharedTreeData.parent_structure_id,
+      include_root: addSharedTreeData.include_root,
+      relationship_type: addSharedTreeData.relationship_type,
+      quantity: addSharedTreeData.quantity
+    };
+
+    console.log('既存ツリー全構造共有リクエスト:', requestData);
+
+    const response = await axios.post(
+      `${apiBaseUrlTree}/${tree.value.id}/add_shared_tree_structure/`,
+      requestData
+    );
+
+    console.log('既存ツリー全構造共有レスポンス:', response.data);
+
+    if (response.data.success) {
+      // ダイアログを閉じる
+      addSharedTreeDialog.value = false;
+
+      // ツリーデータを再取得
+      await refreshTree();
+
+      // 成功メッセージを表示
+      snackbar.value = {
+        show: true,
+        text: `既存ツリーの全構造を共有しました。${response.data.data.shared_structures_count}個のノードが追加されました。`,
+        color: 'success',
+        timeout: 4000
+      };
+    } else {
+      snackbar.value = {
+        show: true,
+        text: response.data.message || '既存ツリーの全構造共有に失敗しました',
+        color: 'error',
+        timeout: 3000
+      };
+    }
+  } catch (error) {
+    console.error('既存ツリー全構造共有エラー:', error);
+    const errorMessage = error.response?.data?.message || '既存ツリーの全構造共有中にエラーが発生しました';
+    snackbar.value = {
+      show: true,
+      text: errorMessage,
+      color: 'error',
+      timeout: 5000
+    };
+  } finally {
+    isAddingSharedTree.value = false;
+  }
+};
+// ===== 特定ノード部分の共有機能を追加 =====
+
+// 特定ノード部分共有関連の状態管理
+const addPartialTreeDialog = ref(false);
+const isAddPartialTreeFormValid = ref(false);
+const addPartialTreeForm = ref(null);
+const isAddingPartialTree = ref(false);
+
+// 特定ノード部分共有用のデータ
+const addPartialTreeData = reactive({
+  source_tree_id: '',
+  source_structure_id: '',
+  parent_structure_id: '',
+  include_children: true,
+  relationship_type: 'assembly',
+  quantity: 1.0
+});
+
+// 利用可能なツリーと構造のリスト（部分共有用）
+const availableTreesForPartialShare = ref([]);
+const availableStructuresForPartialShare = ref([]);
+const loadingPartialStructures = ref(false);
+
+/**
+ * 特定ノード部分共有ダイアログを表示
+ */
+const showAddPartialTreeDialog = () => {
+  // フォームをリセット
+  addPartialTreeData.source_tree_id = '';
+  addPartialTreeData.source_structure_id = '';
+  addPartialTreeData.parent_structure_id = selectedNode.value ? selectedNode.value.structure_id : '';
+  addPartialTreeData.include_children = true;
+  addPartialTreeData.relationship_type = 'assembly';
+  addPartialTreeData.quantity = 1.0;
+
+  // バリデーションをリセット
+  if (addPartialTreeForm.value) {
+    addPartialTreeForm.value.resetValidation();
+  }
+
+  // 利用可能なツリーリストを取得
+  fetchAvailableTreesForPartialShare();
+
+  // ダイアログを表示
+  addPartialTreeDialog.value = true;
+};
+
+/**
+ * 部分共有用のツリーリストを取得
+ */
+const fetchAvailableTreesForPartialShare = async () => {
+  try {
+    const response = await axios.get(`${apiBaseUrlTree}/`);
+
+    if (response.data && response.data.data) {
+      availableTreesForPartialShare.value = response.data.data
+        .filter(t => t.id !== tree.value?.id)
+        .map(t => ({
+          id: t.id,
+          name: t.name,
+          status: t.status,
+          description: t.description || '',
+          display: `${t.name} (${getStatusLabel(t.status)})`
+        }));
+    }
+  } catch (error) {
+    console.error('部分共有用ツリーリストの取得に失敗しました:', error);
+    snackbar.value = {
+      show: true,
+      text: 'ツリーリストの取得に失敗しました',
+      color: 'error',
+      timeout: 3000
+    };
+  }
+};
+
+/**
+ * 選択されたツリーの構造リストを取得
+ */
+const loadPartialStructures = async () => {
+  if (!addPartialTreeData.source_tree_id) {
+    availableStructuresForPartialShare.value = [];
+    return;
+  }
+
+  loadingPartialStructures.value = true;
+  availableStructuresForPartialShare.value = [];
+  addPartialTreeData.source_structure_id = '';
+
+  try {
+    // 1. まずツリー構造を取得
+    const structureResponse = await axios.get(`${apiBaseUrlTree}/${addPartialTreeData.source_tree_id}/structure/`);
+    console.log('Structure API response:', structureResponse.data);
+
+    let structureData;
+    if (structureResponse.data && Array.isArray(structureResponse.data.data)) {
+      structureData = structureResponse.data.data;
+    } else if (Array.isArray(structureResponse.data)) {
+      structureData = structureResponse.data;
+    } else {
+      throw new Error('ツリー構造データの形式が不正です');
+    }
+
+    if (structureData.length === 0) {
+      availableStructuresForPartialShare.value = [];
+      return;
+    }
+
+    // 2. 各構造のノード詳細情報を並行取得
+    const nodeIds = [...new Set(structureData.map(item => item.node))]; // 重複除去
+    const nodeDetailsPromises = nodeIds.map(nodeId =>
+      axios.get(`${apiBaseUrl}/tree-node/${nodeId}/`)
+        .catch(error => {
+          console.warn(`Node ${nodeId} fetch failed:`, error);
+          return { data: { id: nodeId, name: 'Unknown', node_type: 'unknown' } };
+        })
+    );
+
+    const nodeDetailsResponses = await Promise.all(nodeDetailsPromises);
+    const nodeDetailsMap = new Map();
+
+    nodeDetailsResponses.forEach(response => {
+      const data = response.data.data || response.data;
+      if (data && data.id) {
+        nodeDetailsMap.set(data.id, data);
+      }
+    });
+
+    console.log('Node details map:', nodeDetailsMap);
+
+    // 3. 構造データとノード詳細を結合
+    availableStructuresForPartialShare.value = structureData
+      .filter(structure => structure.level > 0) // ルートノードを除外
+      .map(structure => {
+        const nodeDetails = nodeDetailsMap.get(structure.node) || {};
+        const nodeName = nodeDetails.name || `Node-${structure.node}`;
+
+        return {
+          id: structure.id,
+          node_id: structure.node,
+          node_name: nodeName,
+          level: structure.level,
+          path: structure.path,
+          parent_id: structure.parent,
+          node_type: nodeDetails.node_type || 'unknown',
+          display: `${'  '.repeat(structure.level - 1)} ${nodeName} (Level: ${structure.level})`
+        };
+      });
+
+    console.log('Available structures for partial share:', availableStructuresForPartialShare.value);
+
+  } catch (error) {
+    console.error('部分共有用構造リスト取得エラー:', error);
+    snackbar.value = {
+      show: true,
+      text: '構造リストの取得に失敗しました: ' + (error.message || '不明なエラー'),
+      color: 'error',
+      timeout: 3000
+    };
+  } finally {
+    loadingPartialStructures.value = false;
+  }
+};
+
+/**
+ * 特定ノード部分を共有として追加
+ */
+const addPartialTreeStructure = async () => {
+  if (!isAddPartialTreeFormValid.value) return;
+
+  // 必須パラメータの確認
+  if (!addPartialTreeData.source_tree_id ||
+    !addPartialTreeData.source_structure_id ||
+    !addPartialTreeData.parent_structure_id) {
+    snackbar.value = {
+      show: true,
+      text: '必須項目が入力されていません',
+      color: 'error',
+      timeout: 3000
+    };
+    return;
+  }
+
+  isAddingPartialTree.value = true;
+
+  try {
+    // パラメータ名を修正
+    const requestData = {
+      source_tree_id: addPartialTreeData.source_tree_id,
+      source_structure_id: addPartialTreeData.source_structure_id,
+      parent_id: addPartialTreeData.parent_structure_id,  // ← parent_structure_id から parent_id に変更
+      include_children: addPartialTreeData.include_children,
+      relationship_type: addPartialTreeData.relationship_type,
+      quantity: addPartialTreeData.quantity,
+      is_master: false  // 共有インスタンスなので false
+    };
+
+    console.log('修正後のリクエストパラメータ:', requestData);
+
+    // 既存のAPIを使用
+    const response = await axios.post(
+      `${apiBaseUrlTree}/${tree.value.id}/add_existing_structure_shared/`,
+      requestData
+    );
+
+    console.log('特定ノード部分共有レスポンス:', response.data);
+
+    if (response.data.success) {
+      // ダイアログを閉じる
+      addPartialTreeDialog.value = false;
+
+      // ツリーデータを再取得
+      await refreshTree();
+
+      // 選択された構造の情報を表示
+      const selectedStructure = availableStructuresForPartialShare.value.find(
+        s => s.id == addPartialTreeData.source_structure_id
+      );
+
+      // 成功メッセージを表示
+      snackbar.value = {
+        show: true,
+        text: `ノード「${selectedStructure?.node_name || 'Unknown'}」以下の構造を共有しました。${response.data.data.shared_count}個のノードが追加されました。`,
+        color: 'success',
+        timeout: 4000
+      };
+    } else {
+      snackbar.value = {
+        show: true,
+        text: response.data.message || '特定ノード部分の共有に失敗しました',
+        color: 'error',
+        timeout: 3000
+      };
+    }
+  } catch (error) {
+    console.error('特定ノード部分共有エラー:', error);
+    console.error('エラーレスポンス:', error.response?.data);
+
+    const errorMessage = error.response?.data?.message || '特定ノード部分の共有中にエラーが発生しました';
+    snackbar.value = {
+      show: true,
+      text: errorMessage,
+      color: 'error',
+      timeout: 5000
+    };
+  } finally {
+    isAddingPartialTree.value = false;
+  }
+};
+
+// watchで共有元ツリー変更を監視
+watch(() => addPartialTreeData.source_tree_id, () => {
+  loadPartialStructures();
+});
+
+/**
+ * デバッグ用：APIレスポンスの構造を確認する関数
+ * 一時的に追加して、どのような構造でデータが返ってくるかを確認
+ */
+const debugApiResponse = async (treeId) => {
+  try {
+    console.log('=== Debug: Tree Structure API Response ===');
+
+    // 1. ツリー構造APIの確認
+    const structureResponse = await axios.get(`${apiBaseUrlTree}/${treeId}/structure/`);
+    console.log('1. Structure API Full Response:', structureResponse);
+    console.log('1. Structure API Data:', structureResponse.data);
+
+    if (structureResponse.data && structureResponse.data.data) {
+      console.log('1. First structure item:', structureResponse.data.data[0]);
+    }
+
+    // 2. ノード詳細APIの確認
+    const structureData = structureResponse.data.data || structureResponse.data;
+    if (structureData && structureData.length > 0) {
+      const firstNodeId = structureData[0].node;
+      console.log('2. First node ID:', firstNodeId);
+
+      const nodeResponse = await axios.get(`${apiBaseUrl}/tree-node/${firstNodeId}/`);
+      console.log('2. Node API Full Response:', nodeResponse);
+      console.log('2. Node API Data:', nodeResponse.data);
+    }
+
+    console.log('=== End Debug ===');
+
+  } catch (error) {
+    console.error('Debug API Error:', error);
+  }
+};
 
 // ノード編集関連
 const editNodeDialog = ref(false);
@@ -815,7 +1252,39 @@ watch(() => shareData.source_structure_id, async (newId) => {
   }
 });
 
-// コンテキストメニュー操作
+// コンテキストメニュー操作(修正前)
+/*
+const contextMenuOperations = {
+  show: (event, item) => {
+    console.log('Context Menu Item:', item);
+
+    menuPosition.value = { x: event.clientX, y: event.clientY };
+    isMenuVisible.value = true;
+
+    // 選択したノード情報を記録
+    state.selectedNodeInfo = {
+      child: item.child,
+      level: item.level,
+      parent: item.parent
+    };
+
+    console.log('Selected Node Info:', state.selectedNodeInfo);
+
+    // ノードを選択状態にする
+    const node = findNodeById(treeNodes.value, item.child);
+    if (node) {
+      activeNode.value = [node];
+      onNodeSelect([node]);
+    }
+  },
+  hide: () => {
+    isMenuVisible.value = false;
+  }
+};
+*/
+// ===== コンテキストメニューに追加 =====
+// 既存のcontextMenuOperationsの定義を以下のように修正
+
 const contextMenuOperations = {
   show: (event, item) => {
     console.log('Context Menu Item:', item);
@@ -1114,6 +1583,14 @@ onUnmounted(() => {
           <li @click="modalOperations.openPrefixList">コード発番</li>
           <li @click="modalOperations.openNodeList">登録済みノード一覧</li>
           <li @click="showAddNodeDialog">新規ノード作成</li>
+          <li @click="showAddSharedTreeDialog">
+            <v-icon size="small" class="mr-2">mdi-file-tree-outline</v-icon>
+            既存ツリー全体を共有
+          </li>
+          <li @click="showAddPartialTreeDialog">
+            <v-icon size="small" class="mr-2">mdi-source-branch</v-icon>
+            既存ツリーの一部を共有
+          </li>
           <li v-if="selectedNode && canEditNode" @click="showEditNodeDialog">ノード編集</li>
           <li v-if="selectedNode && canDeleteNode" @click="confirmDeleteNode" class="danger">ノード削除</li>
         </ul>
@@ -1318,6 +1795,270 @@ onUnmounted(() => {
       </v-dialog>
     </template>
 
+    <!-- 既存ツリー全構造共有ダイアログ -->
+    <!-- テンプレートの最後（スナックバーの前）に追加 -->
+    <v-dialog v-model="addSharedTreeDialog" width="600px" persistent>
+      <v-card>
+        <v-card-title class="d-flex justify-space-between align-center">
+          <span class="text-h6">既存ツリー全構造を共有</span>
+          <v-btn icon="mdi-close" variant="text" @click="addSharedTreeDialog = false"
+            :disabled="isAddingSharedTree"></v-btn>
+        </v-card-title>
+
+        <v-card-text>
+          <p class="text-body-2 mb-4 text-medium-emphasis">
+            他のツリーの全構造を真の共有として追加します。
+            共有元での変更が自動的に反映されます。
+          </p>
+
+          <v-form ref="addSharedTreeForm" v-model="isAddSharedTreeFormValid">
+            <!-- 共有先の親ノード選択 -->
+            <v-select v-model="addSharedTreeData.parent_structure_id" label="共有先の親ノード *" :items="nodeSelectOptions"
+              item-title="name" item-value="id" variant="outlined" density="comfortable"
+              :rules="[v => !!v || '親ノードは必須です']" hint="このノードの下に共有構造が追加されます" persistent-hint class="mb-4">
+            </v-select>
+
+            <!-- 共有元ツリー選択 -->
+            <v-select v-model="addSharedTreeData.source_tree_id" label="共有元ツリー *" :items="availableTreesForFullShare"
+              item-title="display" item-value="id" variant="outlined" density="comfortable"
+              :rules="[v => !!v || '共有元ツリーは必須です']" hint="全構造をコピーする元のツリー" persistent-hint class="mb-4">
+              <template v-slot:selection="{ item }">
+                <div class="d-flex align-center">
+                  <v-icon :color="getStatusColor(item.raw.status)" class="mr-2">
+                    mdi-file-tree
+                  </v-icon>
+                  {{ item.raw.name }}
+                </div>
+              </template>
+              <template v-slot:item="{ item, props }">
+                <v-list-item v-bind="props">
+                  <template v-slot:prepend>
+                    <v-icon :color="getStatusColor(item.raw.status)">
+                      mdi-file-tree
+                    </v-icon>
+                  </template>
+                  <v-list-item-title>{{ item.raw.name }}</v-list-item-title>
+                  <v-list-item-subtitle>
+                    ステータス: {{ getStatusLabel(item.raw.status) }}
+                  </v-list-item-subtitle>
+                </v-list-item>
+              </template>
+            </v-select>
+
+            <!-- 共有オプション -->
+            <v-row>
+              <v-col cols="12" md="6">
+                <v-select v-model="addSharedTreeData.relationship_type" label="関係タイプ" :items="relationshipTypeOptions"
+                  item-title="name" item-value="value" variant="outlined" density="comfortable" class="mb-3">
+                </v-select>
+              </v-col>
+              <v-col cols="12" md="6">
+                <v-text-field v-model.number="addSharedTreeData.quantity" label="数量" type="number" min="0.001"
+                  step="0.001" variant="outlined" density="comfortable" class="mb-3">
+                </v-text-field>
+              </v-col>
+            </v-row>
+
+            <!-- チェックボックスオプション -->
+            <div class="mb-4">
+              <v-checkbox v-model="addSharedTreeData.include_root" label="ルートノードも含める" color="primary"
+                hint="共有元ツリーのルートノードも一緒に共有します" hide-details="auto">
+              </v-checkbox>
+            </div>
+
+            <!-- 真の共有についての説明 -->
+            <v-alert type="info" variant="outlined" density="compact" class="mb-4">
+              <template v-slot:title>
+                <div class="d-flex align-center">
+                  <v-icon class="mr-2">mdi-information</v-icon>
+                  真の共有について
+                </div>
+              </template>
+              <div class="text-body-2">
+                <p class="mb-2">
+                  • 同じノードオブジェクトを複数のツリーで共有参照します
+                </p>
+                <p class="mb-2">
+                  • 共有元での変更（名前、説明等）が自動的に全ての共有先に反映されます
+                </p>
+                <p class="mb-0">
+                  • データの整合性が自動的に保たれます
+                </p>
+              </div>
+            </v-alert>
+          </v-form>
+        </v-card-text>
+
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn color="grey-darken-1" variant="text" @click="addSharedTreeDialog = false"
+            :disabled="isAddingSharedTree">
+            キャンセル
+          </v-btn>
+          <v-btn color="primary" @click="addSharedTreeStructure"
+            :disabled="!isAddSharedTreeFormValid || isAddingSharedTree" :loading="isAddingSharedTree">
+            <v-icon class="mr-2">mdi-share-variant</v-icon>
+            全構造を共有
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+
+    <!-- 特定ノード部分共有ダイアログ -->
+    <v-dialog v-model="addPartialTreeDialog" width="700px" persistent>
+      <v-card>
+        <v-card-title class="d-flex justify-space-between align-center">
+          <span class="text-h6">既存ツリーの一部を共有</span>
+          <v-btn icon="mdi-close" variant="text" @click="addPartialTreeDialog = false"
+            :disabled="isAddingPartialTree"></v-btn>
+        </v-card-title>
+
+        <v-card-text>
+          <p class="text-body-2 mb-4 text-medium-emphasis">
+            他のツリーから特定のノード部分（例：NODE2以下）を真の共有として追加します。
+            共有元での変更が自動的に反映されます。
+          </p>
+
+          <v-form ref="addPartialTreeForm" v-model="isAddPartialTreeFormValid">
+            <!-- 共有先の親ノード選択 -->
+            <v-select v-model="addPartialTreeData.parent_structure_id" label="共有先の親ノード *" :items="nodeSelectOptions"
+              item-title="name" item-value="id" variant="outlined" density="comfortable"
+              :rules="[v => !!v || '親ノードは必須です']" hint="このノードの下に共有構造が追加されます" persistent-hint class="mb-4">
+            </v-select>
+
+            <!-- 共有元ツリー選択 -->
+            <v-select v-model="addPartialTreeData.source_tree_id" label="共有元ツリー *"
+              :items="availableTreesForPartialShare" item-title="display" item-value="id" variant="outlined"
+              density="comfortable" :rules="[v => !!v || '共有元ツリーは必須です']" hint="構造をコピーする元のツリー" persistent-hint
+              class="mb-4">
+              <template v-slot:selection="{ item }">
+                <div class="d-flex align-center">
+                  <v-icon :color="getStatusColor(item.raw.status)" class="mr-2">
+                    mdi-file-tree
+                  </v-icon>
+                  {{ item.raw.name }}
+                </div>
+              </template>
+              <template v-slot:item="{ item, props }">
+                <v-list-item v-bind="props">
+                  <template v-slot:prepend>
+                    <v-icon :color="getStatusColor(item.raw.status)">
+                      mdi-file-tree
+                    </v-icon>
+                  </template>
+                  <v-list-item-title>{{ item.raw.name }}</v-list-item-title>
+                  <v-list-item-subtitle>
+                    ステータス: {{ getStatusLabel(item.raw.status) }}
+                  </v-list-item-subtitle>
+                </v-list-item>
+              </template>
+            </v-select>
+
+            <!-- 共有元構造選択 -->
+            <v-select v-model="addPartialTreeData.source_structure_id" label="共有したいノード *"
+              :items="availableStructuresForPartialShare" item-title="display" item-value="id" variant="outlined"
+              density="comfortable" :rules="[v => !!v || '共有元ノードは必須です']" :loading="loadingPartialStructures"
+              :disabled="!addPartialTreeData.source_tree_id" hint="このノード以下が共有されます（例：NODE2を選択するとNODE2とNODE3が共有される）"
+              persistent-hint class="mb-4">
+              <template v-slot:selection="{ item }">
+                <div class="d-flex align-center">
+                  <v-icon color="primary" class="mr-2">mdi-source-branch</v-icon>
+                  {{ item.raw.node_name }}
+                </div>
+              </template>
+              <template v-slot:item="{ item, props }">
+                <v-list-item v-bind="props">
+                  <template v-slot:prepend>
+                    <v-icon color="primary">mdi-source-branch</v-icon>
+                  </template>
+                  <v-list-item-title>{{ item.raw.node_name }}</v-list-item-title>
+                  <v-list-item-subtitle>
+                    Level: {{ item.raw.level }} | Path: {{ item.raw.path }}
+                  </v-list-item-subtitle>
+                </v-list-item>
+              </template>
+            </v-select>
+
+            <!-- 共有オプション -->
+            <v-row>
+              <v-col cols="12" md="6">
+                <v-select v-model="addPartialTreeData.relationship_type" label="関係タイプ" :items="relationshipTypeOptions"
+                  item-title="name" item-value="value" variant="outlined" density="comfortable" class="mb-3">
+                </v-select>
+              </v-col>
+              <v-col cols="12" md="6">
+                <v-text-field v-model.number="addPartialTreeData.quantity" label="数量" type="number" min="0.001"
+                  step="0.001" variant="outlined" density="comfortable" class="mb-3">
+                </v-text-field>
+              </v-col>
+            </v-row>
+
+            <!-- チェックボックスオプション -->
+            <div class="mb-4">
+              <v-checkbox v-model="addPartialTreeData.include_children" label="子ノードも含める" color="primary"
+                hint="選択したノードの子ノードも一緒に共有します" hide-details="auto">
+              </v-checkbox>
+            </div>
+
+            <!-- 使用例の説明 -->
+            <v-alert type="success" variant="outlined" density="compact" class="mb-4">
+              <template v-slot:title>
+                <div class="d-flex align-center">
+                  <v-icon class="mr-2">mdi-lightbulb-outline</v-icon>
+                  使用例
+                </div>
+              </template>
+              <div class="text-body-2">
+                <p class="mb-2">
+                  <strong>TREE A:</strong> NODE1 → NODE2 → NODE3
+                </p>
+                <p class="mb-2">
+                  <strong>共有したい部分:</strong> NODE2以下（NODE2とNODE3）
+                </p>
+                <p class="mb-0">
+                  <strong>結果:</strong> TREE BにNODE2とNODE3が真の共有として追加されます
+                </p>
+              </div>
+            </v-alert>
+
+            <!-- 真の共有についての説明 -->
+            <v-alert type="info" variant="outlined" density="compact" class="mb-4">
+              <template v-slot:title>
+                <div class="d-flex align-center">
+                  <v-icon class="mr-2">mdi-information</v-icon>
+                  真の共有について
+                </div>
+              </template>
+              <div class="text-body-2">
+                <p class="mb-2">
+                  • 同じノードオブジェクトを複数のツリーで共有参照します
+                </p>
+                <p class="mb-2">
+                  • 共有元での変更（名前、説明等）が自動的に全ての共有先に反映されます
+                </p>
+                <p class="mb-0">
+                  • データの整合性が自動的に保たれます
+                </p>
+              </div>
+            </v-alert>
+          </v-form>
+        </v-card-text>
+
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn color="grey-darken-1" variant="text" @click="addPartialTreeDialog = false"
+            :disabled="isAddingPartialTree">
+            キャンセル
+          </v-btn>
+          <v-btn color="primary" @click="addPartialTreeStructure"
+            :disabled="!isAddPartialTreeFormValid || isAddingPartialTree" :loading="isAddingPartialTree">
+            <v-icon class="mr-2">mdi-share-variant</v-icon>
+            部分構造を共有
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
     <!-- スナックバー通知 -->
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" :timeout="snackbar.timeout">
       {{ snackbar.text }}
