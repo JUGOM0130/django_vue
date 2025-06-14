@@ -4,6 +4,8 @@ import { useRoute, useRouter } from 'vue-router';
 import axios from 'axios';
 import NodeListLightVersion from '../nodes/NodeListLightVersion.vue';
 import PrefixListLightVersion from '../prefix/PrefixListLightVersion.vue';
+import RegistedNodeList from './dialogs/RegistedNodeList.vue';
+
 
 // ルートとルーター
 const route = useRoute();
@@ -1767,18 +1769,9 @@ onUnmounted(() => {
         </v-card>
       </v-dialog>
 
-      <!-- NodeListモーダル -->
-      <v-dialog v-model="state.isModalOpen.nodeList" width="auto">
-        <v-card>
-          <v-card-title>
-            Node List
-            <v-btn icon="mdi-close" @click="modalOperations.closeNodeList" class="float-right" />
-          </v-card-title>
-          <v-card-text>
-            <NodeListLightVersion @data-sent="handleNodeData" />
-          </v-card-text>
-        </v-card>
-      </v-dialog>
+      <!-- NodeListモーダル 既存ノートからの追加-->
+      <RegistedNodeList v-model="state.isModalOpen.nodeList" @data-sent="handleNodeData"
+        @modal-close="modalOperations.closeNodeList" />
 
       <!-- PrefixListモーダル -->
       <v-dialog v-model="state.isModalOpen.prefixList" width="600px">
