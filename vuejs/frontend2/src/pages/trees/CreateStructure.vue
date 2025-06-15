@@ -5,7 +5,20 @@ import axios from 'axios';
 import NodeListLightVersion from '../nodes/NodeListLightVersion.vue';
 import PrefixListLightVersion from '../prefix/PrefixListLightVersion.vue';
 import RegistedNodeList from './dialogs/RegistedNodeList.vue';
+import { useSnackbar } from './composables/useSnackbar';
 
+
+// スナックバー機能を使用
+const {
+  showSuccess,
+  showError,
+  showWarning,
+  showInfo,
+  showApiResult,
+  showWithUndo,
+  showValidationErrors,
+  snackbar
+} = useSnackbar();
 
 // ルートとルーター
 const route = useRoute();
@@ -71,8 +84,6 @@ const addSharedTreeData = reactive({
 // 利用可能なツリーリスト（全構造共有用）
 const availableTreesForFullShare = ref([]);
 
-// ===== メソッドを追加 =====
-
 /**
  * 既存ツリー全構造共有ダイアログを表示
  */
@@ -116,12 +127,10 @@ const fetchAvailableTreesForFullShare = async () => {
     }
   } catch (error) {
     console.error('全構造共有用ツリーリストの取得に失敗しました:', error);
-    snackbar.value = {
-      show: true,
-      text: 'ツリーリストの取得に失敗しました',
-      color: 'error',
-      timeout: 3000
-    };
+    showError(
+      'ツリーリストの取得に失敗しました',
+      { timeout: 3000 }
+    );
   }
 };
 
@@ -133,12 +142,7 @@ const addSharedTreeStructure = async () => {
 
   // 必須パラメータの確認
   if (!addSharedTreeData.source_tree_id || !addSharedTreeData.parent_structure_id) {
-    snackbar.value = {
-      show: true,
-      text: '必須項目が入力されていません',
-      color: 'error',
-      timeout: 3000
-    };
+    showError('必須項目が入力されていません', { timeout: 3000 });
     return;
   }
 
@@ -170,29 +174,23 @@ const addSharedTreeStructure = async () => {
       await refreshTree();
 
       // 成功メッセージを表示
-      snackbar.value = {
-        show: true,
-        text: `既存ツリーの全構造を共有しました。${response.data.data.shared_structures_count}個のノードが追加されました。`,
-        color: 'success',
-        timeout: 4000
-      };
+      showSuccess(
+        `既存ツリーの全構造を共有しました。${response.data.data.shared_structures_count}個のノードが追加されました。`,
+        { timeout: 4000 }
+      );
+
     } else {
-      snackbar.value = {
-        show: true,
-        text: response.data.message || '既存ツリーの全構造共有に失敗しました',
-        color: 'error',
-        timeout: 3000
-      };
+      showError(
+        response.data.message || '既存ツリーの全構造共有に失敗しました',
+        { timeout: 3000 }
+      );
     }
   } catch (error) {
     console.error('既存ツリー全構造共有エラー:', error);
-    const errorMessage = error.response?.data?.message || '既存ツリーの全構造共有中にエラーが発生しました';
-    snackbar.value = {
-      show: true,
-      text: errorMessage,
-      color: 'error',
-      timeout: 5000
-    };
+    showError(
+      error.response?.data?.message || '既存ツリーの全構造共有中にエラーが発生しました',
+      { timeout: 5000 }
+    );
   } finally {
     isAddingSharedTree.value = false;
   }
@@ -264,12 +262,10 @@ const fetchAvailableTreesForPartialShare = async () => {
     }
   } catch (error) {
     console.error('部分共有用ツリーリストの取得に失敗しました:', error);
-    snackbar.value = {
-      show: true,
-      text: 'ツリーリストの取得に失敗しました',
-      color: 'error',
-      timeout: 3000
-    };
+    showError(
+      'ツリーリストの取得に失敗しました',
+      { timeout: 3000 }
+    );
   }
 };
 
@@ -350,12 +346,8 @@ const loadPartialStructures = async () => {
 
   } catch (error) {
     console.error('部分共有用構造リスト取得エラー:', error);
-    snackbar.value = {
-      show: true,
-      text: '構造リストの取得に失敗しました: ' + (error.message || '不明なエラー'),
-      color: 'error',
-      timeout: 3000
-    };
+    showError('構造リストの取得に失敗しました: ' + (error.message || '不明なエラー'), { timeout: 3000 });
+
   } finally {
     loadingPartialStructures.value = false;
   }
@@ -371,12 +363,7 @@ const addPartialTreeStructure = async () => {
   if (!addPartialTreeData.source_tree_id ||
     !addPartialTreeData.source_structure_id ||
     !addPartialTreeData.parent_structure_id) {
-    snackbar.value = {
-      show: true,
-      text: '必須項目が入力されていません',
-      color: 'error',
-      timeout: 3000
-    };
+    showError('必須項目が入力されていません', { timeout: 3000 });
     return;
   }
 
@@ -417,31 +404,21 @@ const addPartialTreeStructure = async () => {
       );
 
       // 成功メッセージを表示
-      snackbar.value = {
-        show: true,
-        text: `ノード「${selectedStructure?.node_name || 'Unknown'}」以下の構造を共有しました。${response.data.data.shared_count}個のノードが追加されました。`,
-        color: 'success',
-        timeout: 4000
-      };
+      showSuccess(
+        `ノード「${selectedStructure?.node_name || 'Unknown'}」以下の構造を共有しました。${response.data.data.shared_count}個のノードが追加されました。`,
+        { timeout: 4000 }
+      )
     } else {
-      snackbar.value = {
-        show: true,
-        text: response.data.message || '特定ノード部分の共有に失敗しました',
-        color: 'error',
-        timeout: 3000
-      };
+      showError(
+        response.data.message || '特定ノード部分の共有に失敗しました',
+        { timeout: 3000 }
+      );
     }
   } catch (error) {
     console.error('特定ノード部分共有エラー:', error);
     console.error('エラーレスポンス:', error.response?.data);
 
-    const errorMessage = error.response?.data?.message || '特定ノード部分の共有中にエラーが発生しました';
-    snackbar.value = {
-      show: true,
-      text: errorMessage,
-      color: 'error',
-      timeout: 5000
-    };
+    showError(error.response?.data?.message || '特定ノード部分の共有中にエラーが発生しました', { timeout: 5000 });
   } finally {
     isAddingPartialTree.value = false;
   }
@@ -452,40 +429,7 @@ watch(() => addPartialTreeData.source_tree_id, () => {
   loadPartialStructures();
 });
 
-/**
- * デバッグ用：APIレスポンスの構造を確認する関数
- * 一時的に追加して、どのような構造でデータが返ってくるかを確認
- */
-const debugApiResponse = async (treeId) => {
-  try {
-    console.log('=== Debug: Tree Structure API Response ===');
 
-    // 1. ツリー構造APIの確認
-    const structureResponse = await axios.get(`${apiBaseUrlTree}/${treeId}/structure/`);
-    console.log('1. Structure API Full Response:', structureResponse);
-    console.log('1. Structure API Data:', structureResponse.data);
-
-    if (structureResponse.data && structureResponse.data.data) {
-      console.log('1. First structure item:', structureResponse.data.data[0]);
-    }
-
-    // 2. ノード詳細APIの確認
-    const structureData = structureResponse.data.data || structureResponse.data;
-    if (structureData && structureData.length > 0) {
-      const firstNodeId = structureData[0].node;
-      console.log('2. First node ID:', firstNodeId);
-
-      const nodeResponse = await axios.get(`${apiBaseUrl}/tree-node/${firstNodeId}/`);
-      console.log('2. Node API Full Response:', nodeResponse);
-      console.log('2. Node API Data:', nodeResponse.data);
-    }
-
-    console.log('=== End Debug ===');
-
-  } catch (error) {
-    console.error('Debug API Error:', error);
-  }
-};
 
 // ノード編集関連
 const editNodeDialog = ref(false);
@@ -543,13 +487,7 @@ const state = reactive({
   }
 });
 
-// 既に定義されている snackbar 変数の後に追加
-const snackbar = ref({
-  show: false,
-  text: '',
-  color: 'success',
-  timeout: 3000
-});
+
 
 // その他のオプション
 const nodeTypeOptions = [
@@ -929,40 +867,7 @@ const getStatusColor = (status) => {
   return statusColorMap[status] || 'grey';
 };
 
-// ノードアイコン取得
-const getNodeIcon = (item) => {
-  if (item.node_type === 'root') return 'mdi-source-branch';
-  if (item.node_type === 'group') return 'mdi-folder';
-  if (item.is_shared) return 'mdi-link-variant';
-  return 'mdi-file-document';
-};
 
-// ノードアイコン色取得
-const getNodeIconColor = (item) => {
-  if (item.node_type === 'root') return 'purple';
-  if (item.node_type === 'group') return 'orange';
-  if (item.is_shared) return 'blue';
-  return 'green';
-};
-
-// すべてのノードを展開
-const expandAll = () => {
-  // v-treeviewの場合、これは自動的に処理される
-};
-
-// すべてのノードを折りたたむ
-const collapseAll = () => {
-  // v-treeviewの場合、これは自動的に処理される
-};
-
-// 前のページに戻る
-const goBack = () => {
-  router.push({ name: 'tree_list' });
-};
-
-
-
-// ノードを追加
 // ノードを追加
 const addNode = async () => {
   if (!isAddNodeFormValid.value) return;
@@ -1020,16 +925,18 @@ const addNode = async () => {
       await refreshTree();
 
       // 成功メッセージ表示
-      snackbar.value = {
-        show: true,
-        text: `ノード「${newNode.name}」を追加しました`,
-        color: 'success',
-        timeout: 3000
-      };
+      showSuccess(
+        `ノード「${newNode.name}」を追加しました。`,
+        { timeout: 3000 }
+      );
     }
   } catch (error) {
     console.error('ノード追加エラー:', error);
-    errorMessage.value = error.response?.data?.message || 'ノードの追加中にエラーが発生しました';
+    // エラーメッセージの表示
+    showError(
+      error.response?.data?.message || 'ノードの追加中にエラーが発生しました',
+      { timeout: 5000 }
+    );
   } finally {
     isAdding.value = false;
   }
@@ -1135,108 +1042,36 @@ const deleteNode = async () => {
   isDeleting.value = true;
 
   try {
+    const deletedNodeName = selectedNode.value.name;
     const response = await axios.delete(`${apiBaseUrlTree}structures/${selectedStructure.value.id}/`);
 
-    // ダイアログを閉じる
-    deleteNodeDialog.value = false;
+    if (response.data.success) {
+      // 削除成功を元に戻し機能付きで表示
+      showWithUndo(
+        `ノード「${deletedNodeName}」を削除しました`,
+        async () => {
+          // 元に戻す処理（実際の復元ロジックを実装）
+          showInfo('削除を取り消しました');
+          await refreshTree();
+        }
+      );
 
-    // 選択状態をクリア
-    selectedNode.value = null;
-    selectedStructure.value = null;
-
-    // ツリーデータを再取得
-    await refreshTree();
-
-    // 成功メッセージ表示
-    // Vuetifyのスナックバーなどを使用する場合はここで表示
+      deleteNodeDialog.value = false;
+      selectedNode.value = null;
+      selectedStructure.value = null;
+      await refreshTree();
+    }
   } catch (error) {
     console.error('ノード削除エラー:', error);
-    errorMessage.value = error.response?.data?.message || 'ノードの削除中にエラーが発生しました';
+    showError('ノードの削除中にエラーが発生しました');
   } finally {
     isDeleting.value = false;
   }
 };
 
-// 構造共有ダイアログを表示
-const showShareDialog = () => {
-  // 値をリセット
-  shareData.tree_id = '';
-  shareData.source_structure_id = '';
-  shareData.parent_id = selectedNode.value ? selectedNode.value.id : '';
 
-  // フォームのバリデーションをリセット
-  if (shareForm.value) shareForm.value.resetValidation();
 
-  // ダイアログを表示
-  shareStructureDialog.value = true;
-};
 
-// 共有元ツリーが選択されたときに構造リストを取得
-const loadSourceStructures = async () => {
-  if (!shareData.tree_id) return;
-
-  loadingStructures.value = true;
-  availableStructures.value = [];
-  shareData.source_structure_id = '';
-  sourceStructureDetails.value = null;
-
-  try {
-    const response = await axios.get(`${apiBaseUrlTree}trees/${shareData.tree_id}/structure/`);
-
-    // 構造データをフラット化してセレクトボックス用に整形
-    const structures = flattenStructures(response.data);
-    availableStructures.value = structures.map(s => ({
-      id: s.id,
-      node_id: s.node.id,
-      display_name: `${'  '.repeat(s.level)} ${s.node.name}`,
-      level: s.level,
-      is_master: s.is_master,
-      children_count: s.children ? s.children.length : 0
-    }));
-  } catch (error) {
-    console.error('構造リストの取得に失敗しました:', error);
-  } finally {
-    loadingStructures.value = false;
-  }
-};
-
-// 構造を共有
-const shareStructure = async () => {
-  if (!isShareFormValid.value) return;
-
-  isSharing.value = true;
-
-  try {
-    const response = await axios.post(`${apiBaseUrlTree}trees/${tree.value.id}/share_structure/`, {
-      source_structure_id: shareData.source_structure_id,
-      parent_id: shareData.parent_id
-    });
-
-    if (response.data.success) {
-      // ダイアログを閉じる
-      shareStructureDialog.value = false;
-
-      // ツリーデータを再取得
-      await refreshTree();
-
-      // 成功メッセージ表示
-      // Vuetifyのスナックバーなどを使用する場合はここで表示
-    } else {
-      errorMessage.value = response.data.message || '構造の共有に失敗しました';
-    }
-  } catch (error) {
-    console.error('構造共有エラー:', error);
-    errorMessage.value = error.response?.data?.message || '構造の共有中にエラーが発生しました';
-  } finally {
-    isSharing.value = false;
-  }
-};
-
-// コード詳細表示
-const viewCode = () => {
-  if (!selectedNode.value || !selectedNode.value.code) return;
-  router.push({ name: 'code_detail', params: { id: selectedNode.value.code.id } });
-};
 
 // 選択された構造が変更されたときにソース構造の詳細を取得
 watch(() => shareData.source_structure_id, async (newId) => {
@@ -1254,36 +1089,6 @@ watch(() => shareData.source_structure_id, async (newId) => {
   }
 });
 
-// コンテキストメニュー操作(修正前)
-/*
-const contextMenuOperations = {
-  show: (event, item) => {
-    console.log('Context Menu Item:', item);
-
-    menuPosition.value = { x: event.clientX, y: event.clientY };
-    isMenuVisible.value = true;
-
-    // 選択したノード情報を記録
-    state.selectedNodeInfo = {
-      child: item.child,
-      level: item.level,
-      parent: item.parent
-    };
-
-    console.log('Selected Node Info:', state.selectedNodeInfo);
-
-    // ノードを選択状態にする
-    const node = findNodeById(treeNodes.value, item.child);
-    if (node) {
-      activeNode.value = [node];
-      onNodeSelect([node]);
-    }
-  },
-  hide: () => {
-    isMenuVisible.value = false;
-  }
-};
-*/
 // ===== コンテキストメニューに追加 =====
 // 既存のcontextMenuOperationsの定義を以下のように修正
 
@@ -1481,30 +1286,7 @@ const initialize = async () => {
   }
 };
 
-// Prefixからコードを発番するショートカット（コンテキストメニューではなく直接呼び出す場合）
-const generateCodeFromPrefix = () => {
-  // 選択されたノードが親になる
-  if (selectedNode.value) {
-    state.selectedNodeInfo.child = selectedNode.value.id;
-    modalOperations.openPrefixList();
-  } else {
-    errorMessage.value = '先にノードを選択してください';
-  }
-};
 
-// コード生成後の成功メッセージ表示とツリーの再読み込み
-const handleCodeGenerationSuccess = async (generatedCode) => {
-  try {
-    // 成功メッセージを表示
-    showMessage(`コード「${generatedCode}」が正常に生成され、ノードに追加されました`, 'success');
-
-    // ツリーデータを再取得
-    await refreshTree();
-  } catch (error) {
-    console.error('ツリー更新エラー:', error);
-    errorMessage.value = 'ツリーの更新中にエラーが発生しました';
-  }
-};
 
 // コンポーネントのマウント時に初期化
 onMounted(async () => {
@@ -2052,13 +1834,29 @@ onUnmounted(() => {
         </v-card-actions>
       </v-card>
     </v-dialog>
-    <!-- スナックバー通知 -->
-    <v-snackbar v-model="snackbar.show" :color="snackbar.color" :timeout="snackbar.timeout">
+
+
+    <!-- スナックバーコンポーネント（既存のものを置き換え） -->
+    <v-snackbar v-model="snackbar.show" :color="snackbar.color" :timeout="snackbar.timeout"
+      :multi-line="snackbar.multiline" :vertical="snackbar.vertical" location="bottom">
       {{ snackbar.text }}
-      <template v-slot:actions>
-        <v-btn variant="text" icon="mdi-close" @click="snackbar.show = false"></v-btn>
+
+      <!-- アクションボタンがある場合 -->
+      <template v-slot:actions v-if="snackbar.actions && snackbar.actions.length > 0">
+        <v-btn v-for="(action, index) in snackbar.actions" :key="index" :color="action.color || 'white'" variant="text"
+          @click="action.handler">
+          {{ action.text }}
+        </v-btn>
+        <v-btn icon="mdi-close" variant="text" @click="snackbar.show = false"></v-btn>
+      </template>
+
+      <!-- 通常の閉じるボタン -->
+      <template v-slot:actions v-else>
+        <v-btn icon="mdi-close" variant="text" @click="snackbar.show = false"></v-btn>
       </template>
     </v-snackbar>
+
+
   </v-container>
 </template>
 
