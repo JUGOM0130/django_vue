@@ -1,11 +1,9 @@
 # views.py
-from django.shortcuts import render
+import logging
 from django.db import transaction
-from django.utils import timezone
-from django.db.models import Q, Count, Prefetch
-from rest_framework import viewsets, status, generics
+from django.db.models import Q
+from rest_framework import viewsets, status
 from rest_framework.response import Response
-from rest_framework.views import APIView
 from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
 
@@ -24,6 +22,7 @@ from .serializers import (
     TreeStructureShareSerializer
 )
 
+logger = logging.getLogger(__name__)
 
 class StandardResultsSetPagination(PageNumberPagination):
     """
@@ -411,251 +410,40 @@ class CodeMetadataViewSet(viewsets.ModelViewSet):
 # Tree関連のViewSet
 # ========================================
 
+
+
+
 class TreeViewSet(viewsets.ModelViewSet):
     """
-    ツリー管理ViewSet
-    APIエンドポイント: /api/trees/
-    
-    機能:
-    - ツリーのCRUD操作
-    - ツリー構造の取得
-    - 共有構造の管理
+    ツリー管理ViewSet（拡張版）
+    自動同期機能付きの共有構造管理
     """
-    queryset = Tree.objects.prefetch_related('structures').order_by('-created_at')  # created_byを削除
-    serializer_class = TreeSerializer
-    pagination_class = StandardResultsSetPagination
     
-    def list(self, request, *args, **kwargs):
-        """
-        ツリー一覧取得
-        URL: GET /api/trees/
-        """
-        try:
-            queryset = self.filter_queryset(self.get_queryset())
-            
-            # アクティブツリーのみフィルタ
-            is_active = request.query_params.get('is_active', None)
-            if is_active:
-                queryset = queryset.filter(is_active=is_active.lower() == 'true')
-            
-            # ページネーション処理
-            page = self.paginate_queryset(queryset)
-            if page is not None:
-                serializer = self.get_serializer(page, many=True)
-                paginated_data = self.get_paginated_response(serializer.data).data
-                
-                response_data = {
-                    'success': True,
-                    'message': f"ツリー一覧を取得しました（{paginated_data['count']}件中{len(serializer.data)}件表示）",
-                    'count': paginated_data['count'],
-                    'next': paginated_data['next'],
-                    'previous': paginated_data['previous'],
-                    'results': paginated_data['results']
-                }
-                
-                return Response(response_data)
-            
-            serializer = self.get_serializer(queryset, many=True)
-            return Response({
-                'success': True,
-                'message': f"ツリー一覧を取得しました（{len(serializer.data)}件）",
-                'data': serializer.data
-            })
-        except Exception as e:
-            return Response(
-                {
-                    'success': False,
-                    'message': f"ツリー一覧取得中にエラーが発生しました: {str(e)}"
-                },
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
-    def retrieve(self, request, *args, **kwargs):
-        """
-        単一ツリーの取得
-        URL: GET /api/trees/{tree_id}/
-        """
-        try:
-            instance = self.get_object()
-            serializer = self.get_serializer(instance)
-            return Response({
-                'success': True,
-                'message': f"ツリー「{instance.name}」を取得しました",
-                'data': serializer.data
-            })
-        except Exception as e:
-            return Response(
-                {
-                    'success': False,
-                    'message': f"ツリー取得中にエラーが発生しました: {str(e)}"
-                },
-                status=status.HTTP_404_NOT_FOUND
-            )
-
-    @action(detail=True, methods=['get'])
-    def structure(self, request, pk=None):
-        """
-        指定されたツリーIDの構造データを取得
-        URL: GET /api/trees/{tree_id}/structure/
-        
-        レスポンス:
-        - success: 成功フラグ
-        - message: 結果メッセージ
-        - data: ツリー構造データ（階層構造）
-        """
-        tree = self.get_object()
-        
-        try:
-            # ルート構造を取得（階層表示用）
-            root_structures = tree.get_root_structures()
-            
-            # 階層構造用シリアライザを使用
-            serializer = TreeStructureHierarchySerializer(
-                root_structures, 
-                many=True, 
-                context={'request': request}
-            )
-            
-            return Response({
-                'success': True,
-                'message': f"ツリー「{tree.name}」の構造を取得しました",
-                'data': {
-                    'tree_id': tree.id,
-                    'tree_name': tree.name,
-                    'root_structures': serializer.data
-                }
-            })
-            
-        except Exception as e:
-            return Response(
-                {
-                    'success': False,
-                    'message': f"ツリー構造取得中にエラーが発生しました: {str(e)}"
-                },
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
-    @action(detail=True, methods=['post'])
-    def add_structure(self, request, pk=None):
-        """
-        ツリーに新しい構造を追加
-        URL: POST /api/trees/{tree_id}/add_structure/
-        
-        リクエストパラメータ:
-        - parent_id: 親構造ID（オプション、ルートの場合はnull）
-        - node_name: ノード名（必須）
-        - node_description: ノード説明（オプション）
-        - node_type: ノードタイプ（オプション、デフォルト='default'）
-        - node_attributes: ノード属性（オプション、JSON）
-        - code_id: 関連コードID（オプション）
-        - sequence: 並び順（オプション、デフォルト=0）
-        """
-        tree = self.get_object()
-        
-        serializer = TreeStructureCreateSerializer(data=request.data)
-        if not serializer.is_valid():
-            return Response(
-                {
-                    'success': False,
-                    'message': 'リクエストデータが無効です',
-                    'errors': serializer.errors
-                },
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        validated_data = serializer.validated_data
-        
-        try:
-            with transaction.atomic():
-                # ノードを作成
-                node_data = {
-                    'name': validated_data['node_name'],
-                    'description': validated_data.get('node_description', ''),
-                    'node_type': validated_data.get('node_type', 'default'),
-                    'attributes': validated_data.get('node_attributes', {})
-                }
-                
-                if validated_data.get('code_id'):
-                    node_data['code_id'] = validated_data['code_id']
-                
-                node = TreeNode.objects.create(**node_data)
-                
-                # 親構造を取得
-                parent_structure = None
-                if validated_data.get('parent_id'):
-                    parent_structure = TreeStructure.objects.get(id=validated_data['parent_id'])
-                    
-                    # 親構造が同じツリーに属しているかチェック
-                    if parent_structure.tree.id != tree.id:
-                        raise ValidationError("指定された親構造は別のツリーに属しています")
-                
-                # 構造を作成
-                structure = TreeStructure.objects.create(
-                    tree=tree,
-                    parent=parent_structure,
-                    node=node,
-                    sequence=validated_data.get('sequence', 0),
-                    sharing_type='independent'
-                )
-                
-                # 変更ログを記録
-                TreeChangeLog.objects.create(
-                    tree=tree,
-                    structure=structure,
-                    action='structure_add',
-                    new_value={
-                        'node_name': node.name,
-                        'parent_id': parent_structure.id if parent_structure else None,
-                        'level': structure.level
-                    },
-                    change_reason='新規構造追加'
-                )
-                
-                # レスポンスデータを作成
-                structure_serializer = TreeStructureSerializer(structure, context={'request': request})
-                
-                return Response({
-                    'success': True,
-                    'message': f"構造「{node.name}」を追加しました",
-                    'data': structure_serializer.data
-                }, status=status.HTTP_201_CREATED)
-                
-        except Exception as e:
-            return Response(
-                {
-                    'success': False,
-                    'message': f"構造追加中にエラーが発生しました: {str(e)}"
-                },
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
     @action(detail=True, methods=['post'])
     def share_structure(self, request, pk=None):
         """
-        他のツリーの構造をこのツリーに共有
+        他のツリーの構造をこのツリーに共有（自動同期機能付き）
         URL: POST /api/trees/{tree_id}/share_structure/
         
         リクエストパラメータ:
         - source_structure_id: 共有元構造ID（必須）
         - parent_id: このツリーでの親構造ID（オプション）
         
-        レスポンス:
-        - success: 成功フラグ
-        - message: 結果メッセージ
-        - data: 共有された構造情報
+        機能:
+        1. 構造の共有
+        2. 既存の共有ツリーとの自動同期
+        3. 双方向同期の確立
         """
+        
         target_tree = self.get_object()
         
         serializer = TreeStructureShareSerializer(data=request.data)
         if not serializer.is_valid():
-            return Response(
-                {
-                    'success': False,
-                    'message': 'リクエストデータが無効です',
-                    'errors': serializer.errors
-                },
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({
+                'success': False,
+                'message': 'リクエストデータが無効です',  
+                'errors': serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
         
         validated_data = serializer.validated_data
         source_structure_id = validated_data['source_structure_id']
@@ -667,19 +455,14 @@ class TreeViewSet(viewsets.ModelViewSet):
             
             if parent_id:
                 parent_structure = TreeStructure.objects.get(id=parent_id)
-                
-                # 親構造がターゲットツリーに属しているかチェック
                 if parent_structure.tree.id != target_tree.id:
-                    return Response(
-                        {
-                            'success': False,
-                            'message': '指定された親構造は別のツリーに属しています'
-                        },
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
+                    return Response({
+                        'success': False,
+                        'message': '指定された親構造は別のツリーに属しています'
+                    }, status=status.HTTP_400_BAD_REQUEST)
             
             with transaction.atomic():
-                # 共有グループを作成 or 取得
+                # Step 1: 共有グループの作成または取得
                 shared_group = source_structure.shared_group
                 
                 if not shared_group:
@@ -691,29 +474,19 @@ class TreeViewSet(viewsets.ModelViewSet):
                     )
                     
                     # 元の構造を共有グループに追加
-                    source_structure.sharing_type = 'shared'
-                    source_structure.shared_group = shared_group
-                    source_structure.group_relative_path = '0'
-                    source_structure.save()
-                    
-                    # 元の構造の子構造も共有グループに追加
-                    self._add_children_to_shared_group(source_structure, shared_group)
+                    self._convert_to_shared_structure(source_structure, shared_group)
                 
-                # ターゲットツリーに共有構造を作成
-                new_structure = TreeStructure.objects.create(
-                    tree=target_tree,
-                    parent=parent_structure,
-                    node=source_structure.node,  # 同じノードを共有
-                    sequence=0,
-                    sharing_type='shared',
-                    shared_group=shared_group,
-                    group_relative_path='0'
+                # Step 2: ターゲットツリーに共有構造を作成
+                new_structure = self._create_shared_structure(
+                    target_tree, parent_structure, source_structure, shared_group
                 )
                 
-                # 子構造も再帰的に共有
-                self._share_child_structures(source_structure, new_structure, shared_group)
+                # Step 3: 既存の共有ツリーに同期
+                sync_count = self._sync_to_existing_shared_trees(
+                    shared_group, source_structure, exclude_trees=[target_tree.id, source_structure.tree.id]
+                )
                 
-                # 変更ログを記録
+                # Step 4: 変更ログを記録
                 TreeChangeLog.objects.create(
                     tree=target_tree,
                     structure=new_structure,
@@ -721,9 +494,10 @@ class TreeViewSet(viewsets.ModelViewSet):
                     new_value={
                         'shared_group_id': shared_group.id,
                         'source_tree_id': source_structure.tree.id,
-                        'source_structure_id': source_structure.id
+                        'source_structure_id': source_structure.id,
+                        'synced_trees_count': sync_count
                     },
-                    change_reason='構造共有への参加'
+                    change_reason='構造共有への参加（自動同期付き）'
                 )
                 
                 # レスポンスデータを作成
@@ -731,17 +505,17 @@ class TreeViewSet(viewsets.ModelViewSet):
                 
                 response_data = {
                     'success': True,
-                    'message': f"構造「{source_structure.node.name}」を共有しました",
+                    'message': f"構造「{source_structure.node.name}」を共有しました（{sync_count + 1}個のツリーで同期）",
                     'data': {
                         'structure': structure_serializer.data,
                         'shared_group': {
                             'id': shared_group.id,
                             'name': shared_group.name
                         },
-                        'source_structure_id': source_structure.id,
-                        'source_tree': {
-                            'id': source_structure.tree.id,
-                            'name': source_structure.tree.name
+                        'sync_info': {
+                            'total_participating_trees': sync_count + 2,  # source + target + others
+                            'auto_synced_trees': sync_count,
+                            'bidirectional_sync': True
                         }
                     }
                 }
@@ -749,22 +523,213 @@ class TreeViewSet(viewsets.ModelViewSet):
                 return Response(response_data, status=status.HTTP_201_CREATED)
                 
         except TreeStructure.DoesNotExist:
-            return Response(
-                {
-                    'success': False,
-                    'message': '指定された構造が存在しません'
-                },
-                status=status.HTTP_404_NOT_FOUND
-            )
+            return Response({
+                'success': False,
+                'message': '指定された構造が存在しません'
+            }, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
-            return Response(
-                {
+            logger.error(f"構造共有エラー: {str(e)}")
+            return Response({
+                'success': False,
+                'message': f'構造共有エラー: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    @action(detail=True, methods=['post'])
+    def add_to_shared_structure(self, request, pk=None):
+        """
+        共有構造に新しいノードを追加（全共有ツリーに自動反映）
+        URL: POST /api/trees/{tree_id}/add_to_shared_structure/
+        
+        リクエストパラメータ:
+        - parent_structure_id: 親構造ID（必須、共有構造である必要がある）
+        - node_name: ノード名（必須）
+        - node_description: ノード説明（オプション）
+        - node_type: ノードタイプ（オプション）
+        - sequence: 並び順（オプション）
+        
+        機能:
+        共有構造配下に新しいノードを追加し、同じ共有グループの全ツリーに自動反映
+        """
+        
+        tree = self.get_object()
+        
+        try:
+            parent_structure_id = request.data.get('parent_structure_id')
+            if not parent_structure_id:
+                return Response({
                     'success': False,
-                    'message': f'構造共有エラー: {str(e)}'
-                },
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                    'message': '親構造IDが必要です'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            parent_structure = TreeStructure.objects.get(
+                id=parent_structure_id,
+                tree=tree,
+                sharing_type='shared'
             )
-
+            
+            if not parent_structure.shared_group:
+                return Response({
+                    'success': False,
+                    'message': '指定された構造は共有構造ではありません'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            with transaction.atomic():
+                # Step 1: 新しいノードを作成
+                node = TreeNode.objects.create(
+                    name=request.data.get('node_name'),
+                    description=request.data.get('node_description', ''),
+                    node_type=request.data.get('node_type', 'default')
+                )
+                
+                # Step 2: 現在のツリーに構造を作成
+                sequence = request.data.get('sequence', 0)
+                new_path = f"{parent_structure.group_relative_path}.{sequence}"
+                
+                new_structure = TreeStructure.objects.create(
+                    tree=tree,
+                    parent=parent_structure,
+                    node=node,
+                    sequence=sequence,
+                    sharing_type='shared',
+                    shared_group=parent_structure.shared_group,
+                    group_relative_path=new_path
+                )
+                
+                # Step 3: 他の全共有ツリーに自動追加
+                participating_trees = parent_structure.shared_group.get_participating_trees().exclude(id=tree.id)
+                synced_trees = []
+                
+                for target_tree in participating_trees:
+                    # 対応する親構造を見つける
+                    target_parent = TreeStructure.objects.filter(
+                        tree=target_tree,
+                        shared_group=parent_structure.shared_group,
+                        group_relative_path=parent_structure.group_relative_path
+                    ).first()
+                    
+                    if target_parent:
+                        # 同じ構造を作成
+                        synced_structure = TreeStructure.objects.create(
+                            tree=target_tree,
+                            parent=target_parent,
+                            node=node,  # 同じノードを共有
+                            sequence=sequence,
+                            sharing_type='shared',
+                            shared_group=parent_structure.shared_group,
+                            group_relative_path=new_path
+                        )
+                        
+                        synced_trees.append({
+                            'tree_id': target_tree.id,
+                            'tree_name': target_tree.name,
+                            'structure_id': synced_structure.id
+                        })
+                
+                # Step 4: 変更ログを記録
+                TreeChangeLog.objects.create(
+                    tree=tree,
+                    structure=new_structure,
+                    action='shared_structure_add',
+                    new_value={
+                        'node_name': node.name,
+                        'shared_group_id': parent_structure.shared_group.id,
+                        'auto_synced_trees': synced_trees,
+                        'total_synced_count': len(synced_trees)
+                    },
+                    change_reason=f'共有構造への追加（{len(synced_trees)}個のツリーに自動同期）'
+                )
+                
+                # レスポンス
+                return Response({
+                    'success': True,
+                    'message': f"ノード「{node.name}」を共有構造に追加しました（{len(synced_trees) + 1}個のツリーに反映）",
+                    'data': {
+                        'node': {
+                            'id': node.id,
+                            'name': node.name,
+                            'description': node.description
+                        },
+                        'structure': {
+                            'id': new_structure.id,
+                            'tree_id': tree.id,
+                            'parent_id': parent_structure.id
+                        },
+                        'sync_result': {
+                            'total_trees': len(synced_trees) + 1,
+                            'synced_trees': synced_trees,
+                            'shared_group_id': parent_structure.shared_group.id
+                        }
+                    }
+                }, status=status.HTTP_201_CREATED)
+                
+        except TreeStructure.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': '指定された親構造が存在しないか、共有構造ではありません'
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"共有構造追加エラー: {str(e)}")
+            return Response({
+                'success': False,
+                'message': f'共有構造への追加中にエラーが発生しました: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    def _convert_to_shared_structure(self, structure, shared_group):
+        """
+        既存の構造を共有構造に変換する補助メソッド
+        """
+        structure.sharing_type = 'shared'
+        structure.shared_group = shared_group
+        structure.group_relative_path = '0'
+        structure.save()
+        
+        # 子構造も再帰的に処理
+        self._add_children_to_shared_group(structure, shared_group)
+    
+    def _create_shared_structure(self, target_tree, parent_structure, source_structure, shared_group):
+        """
+        共有構造を作成する補助メソッド
+        """
+        new_structure = TreeStructure.objects.create(
+            tree=target_tree,
+            parent=parent_structure,
+            node=source_structure.node,  # 同じノードを共有
+            sequence=source_structure.sequence,
+            sharing_type='shared',
+            shared_group=shared_group,
+            group_relative_path='0'
+        )
+        
+        # 子構造も再帰的に共有
+        self._share_child_structures(source_structure, new_structure, shared_group)
+        
+        return new_structure
+    
+    def _sync_to_existing_shared_trees(self, shared_group, source_structure, exclude_trees=None):
+        """
+        既存の共有ツリーに構造を同期する補助メソッド
+        """
+        if exclude_trees is None:
+            exclude_trees = []
+        
+        participating_trees = shared_group.get_participating_trees().exclude(id__in=exclude_trees)
+        sync_count = 0
+        
+        for target_tree in participating_trees:
+            # 既に同じ構造が存在するかチェック
+            existing = TreeStructure.objects.filter(
+                tree=target_tree,
+                node=source_structure.node,
+                shared_group=shared_group
+            ).exists()
+            
+            if not existing:
+                # 新しい構造を作成
+                self._create_shared_structure(target_tree, None, source_structure, shared_group)
+                sync_count += 1
+        
+        return sync_count
+    
     def _add_children_to_shared_group(self, parent_structure, shared_group):
         """
         子構造を共有グループに追加する補助メソッド

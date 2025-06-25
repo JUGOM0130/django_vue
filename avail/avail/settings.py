@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     'pdm4',
     'core',
     'pdm5'
+    'pdm5.apps.Pdm5Config',  # PDM5アプリケーションを追加
 
 ]
 
