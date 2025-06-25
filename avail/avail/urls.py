@@ -32,6 +32,7 @@ urlpatterns = [
     path('api2/', include('pdm2.urls')),
     path('api3/', include('pdm3.urls')),
     path('api4/', include('pdm4.urls')),
+    path('api5/', include('pdm4.urls')),
 
     path('app/',include('entrypoint.urls')),
     path('login/',include('entrypoint.urls')),

@@ -49,7 +49,8 @@ INSTALLED_APPS = [
     'pdm2',
     'pdm3',
     'pdm4',
-    'core'
+    'core',
+    'pdm5'
 
 ]
 
