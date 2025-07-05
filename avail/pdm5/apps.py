@@ -6,7 +6,6 @@ Django アプリ設定
 
 from django.apps import AppConfig
 
-
 class Pdm5Config(AppConfig):
     """
     PDM5アプリケーション設定
@@ -14,7 +13,7 @@ class Pdm5Config(AppConfig):
     """
     
     default_auto_field = 'django.db.models.BigAutoField'
-    name = 'avail.pdm5'
+    name = 'pdm5'
     verbose_name = '共有ツリー構造システム（PDM5）'
     
     def ready(self):

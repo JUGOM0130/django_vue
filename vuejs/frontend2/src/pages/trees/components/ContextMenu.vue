@@ -277,61 +277,32 @@ onUnmounted(() => {
     document.removeEventListener('keydown', handleKeydown);
 });
 </script>
+
 <template>
-    <Teleport to="body">
-        <Transition name="context-menu" @enter="onEnter" @after-enter="onAfterEnter" @leave="onLeave">
-            <div v-if="isVisible" ref="contextMenuRef" class="context-menu" :class="[
-                `context-menu--${theme}`,
-                {
-                    'context-menu--dark': isDark,
-                    'context-menu--compact': compact
-                }
-            ]" :style="menuStyle" role="menu" :aria-label="ariaLabel" @click.stop @contextmenu.prevent>
-                <!-- メニューアイテムの描画 -->
-                <template v-for="(item, index) in menuItems" :key="item.id">
-                    <!-- 区切り線 -->
-                    <div v-if="item.type === 'separator'" class="context-menu__separator" role="separator"></div>
-
-                    <!-- 通常のメニューアイテム -->
-                    <div v-else class="context-menu__item" :class="{
-                        'context-menu__item--disabled': item.disabled,
-                        'context-menu__item--danger': item.danger,
-                        'context-menu__item--with-icon': item.icon,
-                        'context-menu__item--with-shortcut': item.shortcut,
-                        'context-menu__item--focused': focusedIndex === index,
-                        'context-menu__item--has-submenu': item.submenu
-                    }" role="menuitem" :aria-disabled="item.disabled" :tabindex="item.disabled ? -1 : 0"
-                        @click="handleItemClick(item)" @mouseenter="handleItemHover(index)"
-                        @mouseleave="handleItemLeave(index)">
-                        <!-- アイコン -->
-                        <div class="context-menu__item-icon" v-if="item.icon || hasAnyIcon">
-                            <v-icon v-if="item.icon" :icon="item.icon" size="16" :color="getIconColor(item)" />
-                        </div>
-
-                        <!-- ラベル -->
-                        <div class="context-menu__item-label">
-                            {{ item.label }}
-                        </div>
-
-                        <!-- ショートカット -->
-                        <div v-if="item.shortcut" class="context-menu__item-shortcut">
-                            {{ item.shortcut }}
-                        </div>
-
-                        <!-- サブメニューの矢印 -->
-                        <div v-if="item.submenu" class="context-menu__item-arrow">
-                            <v-icon icon="mdi-chevron-right" size="16" />
-                        </div>
-                    </div>
-                </template>
-
-                <!-- 空の状態 -->
-                <div v-if="menuItems.length === 0" class="context-menu__empty">
-                    {{ emptyText }}
-                </div>
-            </div>
-        </Transition>
-    </Teleport>
+    <!-- コンテキストメニュー -->
+    <div v-if="isMenuVisible" class="context-menu" :style="{
+        position: 'fixed',
+        top: `${menuPosition.y}px`,
+        left: `${menuPosition.x}px`,
+        zIndex: 1000
+    }" @click.stop>
+        <ul>
+            <!-- Prefixリストを開くオプションを追加 -->
+            <li @click="modalOperations.openPrefixList">コード発番</li>
+            <li @click="modalOperations.openNodeList">登録済みノード一覧</li>
+            <li @click="showAddNodeDialog">新規ノード作成</li>
+            <li @click="showAddSharedTreeDialog">
+                <v-icon size="small" class="mr-2">mdi-file-tree-outline</v-icon>
+                既存ツリー全体を共有
+            </li>
+            <li @click="showAddPartialTreeDialog">
+                <v-icon size="small" class="mr-2">mdi-source-branch</v-icon>
+                既存ツリーの一部を共有
+            </li>
+            <li v-if="selectedNode && canEditNode" @click="showEditNodeDialog">ノード編集</li>
+            <li v-if="selectedNode && canDeleteNode" @click="confirmDeleteNode" class="danger">ノード削除</li>
+        </ul>
+    </div>
 </template>
 
 

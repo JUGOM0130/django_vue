@@ -370,26 +370,21 @@ const addPartialTreeStructure = async () => {
   isAddingPartialTree.value = true;
 
   try {
-    // パラメータ名を修正
+    // ✅ 正しいエンドポイントに変更
     const requestData = {
-      source_tree_id: addPartialTreeData.source_tree_id,
       source_structure_id: addPartialTreeData.source_structure_id,
-      parent_id: addPartialTreeData.parent_structure_id,  // ← parent_structure_id から parent_id に変更
-      include_children: addPartialTreeData.include_children,
-      relationship_type: addPartialTreeData.relationship_type,
-      quantity: addPartialTreeData.quantity,
-      is_master: false  // 共有インスタンスなので false
+      parent_id: addPartialTreeData.parent_structure_id
     };
 
-    console.log('修正後のリクエストパラメータ:', requestData);
+    console.log('構造共有リクエストパラメータ:', requestData);
 
-    // 既存のAPIを使用
+    // ✅ share_structure エンドポイントを使用
     const response = await axios.post(
-      `${apiBaseUrlTree}/${tree.value.id}/add_existing_structure_shared/`,
+      `${apiBaseUrlTree}/${tree.value.id}/share_structure/`,
       requestData
     );
 
-    console.log('特定ノード部分共有レスポンス:', response.data);
+    console.log('構造共有レスポンス:', response.data);
 
     if (response.data.success) {
       // ダイアログを閉じる
@@ -405,20 +400,20 @@ const addPartialTreeStructure = async () => {
 
       // 成功メッセージを表示
       showSuccess(
-        `ノード「${selectedStructure?.node_name || 'Unknown'}」以下の構造を共有しました。${response.data.data.shared_count}個のノードが追加されました。`,
+        `構造「${selectedStructure?.node_name || 'Unknown'}」を共有グループに追加しました。他のツリーにも自動同期されます。`,
         { timeout: 4000 }
       )
     } else {
       showError(
-        response.data.message || '特定ノード部分の共有に失敗しました',
+        response.data.message || '構造共有に失敗しました',
         { timeout: 3000 }
       );
     }
   } catch (error) {
-    console.error('特定ノード部分共有エラー:', error);
+    console.error('構造共有エラー:', error);
     console.error('エラーレスポンス:', error.response?.data);
 
-    showError(error.response?.data?.message || '特定ノード部分の共有中にエラーが発生しました', { timeout: 5000 });
+    showError(error.response?.data?.message || '構造共有中にエラーが発生しました', { timeout: 5000 });
   } finally {
     isAddingPartialTree.value = false;
   }

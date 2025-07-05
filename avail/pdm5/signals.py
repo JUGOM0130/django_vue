@@ -268,10 +268,49 @@ def sync_existing_shared_structures(shared_group_id, source_tree_id):
         logger.error(f"既存共有構造同期エラー: {str(e)}")
 
 
-# apps.pyで登録するための設定
 def register_signals():
     """
-    シグナルを登録する関数
-    apps.pyのready()メソッドで呼び出す
+    シグナルハンドラーを登録する関数
+    
+    機能説明:
+    アプリケーション起動時にDjangoシグナルハンドラーを登録する。
+    apps.pyのready()メソッドで呼び出される。
+    
+    登録されるシグナル:
+    - TreeNode の変更・削除時の自動同期
+    - TreeStructure の追加・削除時の共有グループ同期
+    
+    重複登録防止:
+    - _registered フラグによる重複登録チェック
+    - 既に登録済みの場合は処理をスキップ
+    
+    エラーハンドリング:
+    - 登録失敗時は例外を発生させてアプリケーション起動を停止
+    - ログに詳細なエラー情報を記録
+    
+    使用方法:
+    apps.py内で以下のように呼び出し:
+    def ready(self):
+        from .signals import register_signals
+        register_signals()
     """
-    pass  # この関数が読み込まれることでシグナルが自動登録される
+    # 重複登録防止
+    if hasattr(register_signals, '_registered'):
+        logger.info("PDM5: シグナルは既に登録済みです")
+        return
+    
+    try:
+        # TreeStructure関連シグナル（実際に定義されているハンドラーを登録）
+        post_save.connect(auto_sync_shared_structure_create, sender=TreeStructure)
+        post_delete.connect(auto_sync_shared_structure_delete, sender=TreeStructure)
+        
+        # TreeNode関連シグナル（実際に定義されているハンドラーを登録）
+        post_save.connect(auto_sync_shared_node_update, sender=TreeNode)
+        
+        # 登録完了フラグ
+        register_signals._registered = True
+        logger.info("✅ PDM5: 共有構造自動同期シグナルが正常に登録されました")
+        
+    except Exception as e:
+        logger.error(f"❌ PDM5: シグナル登録でエラーが発生しました: {e}")
+        raise
