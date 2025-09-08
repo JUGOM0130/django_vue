@@ -43,14 +43,15 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'corsheaders',
-    'pdm',
+    #'pdm',
     'entrypoint',
     'accounts',
-    'pdm2',
-    'pdm3',
-    'pdm4',
+    #'pdm2',
+    #'pdm3',
+    #'pdm4',
     'core',
-    'pdm5',
+    #'pdm5',
+    'apps.pdm_system.codes.apps.CodesConfig',
     
 
 ]
@@ -66,7 +67,10 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-ROOT_URLCONF = 'avail.urls'
+# configファイルの名前をavailからconfigに変更
+# ROOT_URLCONF = 'avail.urls'
+ROOT_URLCONF = 'config.urls'
+
 
 TEMPLATES = [
     {
@@ -92,7 +96,7 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'avail.wsgi.application'
+WSGI_APPLICATION = 'config.wsgi.application'
 
 
 # Database

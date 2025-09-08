@@ -23,16 +23,16 @@ from django.views.generic import TemplateView
 
 # Swaggerへ表示したいURLパターンを定義
 api_patterns = [
-    path('api4/', include('pdm4.urls')),  # 表示したいAPIのみ記述
+    #path('api4/', include('pdm4.urls')),  # 表示したいAPIのみ記述
 ]
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('api/', include('pdm.urls')),
-    path('api2/', include('pdm2.urls')),
-    path('api3/', include('pdm3.urls')),
-    path('api4/', include('pdm4.urls')),
-    path('api5/', include('pdm4.urls')),
+    #path('api/', include('pdm.urls')),
+    #path('api2/', include('pdm2.urls')),
+    #path('api3/', include('pdm3.urls')),
+    #path('api4/', include('pdm4.urls')),
+    #path('api5/', include('pdm4.urls')),
 
     path('app/',include('entrypoint.urls')),
     path('login/',include('entrypoint.urls')),
@@ -48,4 +48,7 @@ urlpatterns = [
         template_name='swagger-ui.html',
         extra_context={'schema_url':'openapi-schema'}
     ), name='swagger-ui'),
+    
+    # 新規-コード管理システム
+    path('codes/', include('apps.pdm_system.codes.urls')),
 ]
